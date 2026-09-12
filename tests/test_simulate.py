@@ -31,6 +31,26 @@ def test_simulate_season_matches_pl_marginals_without_effect():
     np.testing.assert_allclose(observed, expected, atol=0.03)
 
 
+def test_top5_probability_favours_strong_players():
+    utilities = [3.0, 2.0, 1.0, 0.0, -1.0, -2.0]
+    frame = pd.DataFrame(
+        {
+            "ROUND_YEAR": [2024] * 6,
+            "PROVIDERID": ["m1"] * 6,
+            "PLAYER_PLAYER_PLAYER_PLAYERID": [f"p{i}" for i in range(6)],
+            "FULL_NAME": list("ABCDEF"),
+            "TEAM_NAME": ["T"] * 6,
+            "UTILITY": utilities,
+            "BROWNLOW_VOTES_AUDITED": [3.0, 2.0, 1.0, 0.0, 0.0, 0.0],
+        }
+    )
+    simulation = simulate.simulate_season(frame, tau=1.0, n_sims=500, seed=6)
+    players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
+    assert players["p_top5"].between(0.0, 1.0).all()
+    assert players.loc[0, "p_top5"] == 1.0
+    assert players["p_top5"].sum() >= 5.0
+
+
 def test_persistent_effect_widens_season_spread():
     without = simulate.simulate_season(
         _season_frame(), tau=1.0, effect_scale=0.0, n_sims=2000, seed=3

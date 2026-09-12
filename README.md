@@ -108,7 +108,10 @@ Run the chronological backtest (per-season scores are cached and reused):
 uv run python -m brownlow.cli baseline --model ranking --seasons 2013-2025  # out-of-sample scores
 uv run python -m brownlow.cli evaluate --model ranking --seasons 2015-2025  # leak-free tau + metrics
 uv run python -m brownlow.cli calibrate-effects --model ranking             # effect scale grid
+uv run python -m brownlow.cli forecast --model ranking --season 2026        # season simulation
 ```
+
+The 2026 forecast is written up in [`docs/forecast-2026.md`](docs/forecast-2026.md).
 
 Run the tests:
 
@@ -185,9 +188,9 @@ Redesign phase status:
 - [x] **Phase 3a — persistent uncertainty**: player-season effect (one calibrated scale, contender-CRPS grid) and a shared simulator used for historical and future seasons.
 - [x] **Phase 1b — extended history and features**: 14 label seasons (2012–2025) via `R/extract_fitzroy.R` and height/position squads via `R/extract_squads.R`; centre-bounce attendances and height features; 11-season spread calibration (contender 90% coverage 0.885).
 - [ ] **Phase 3b — model variation**: match-block bootstrap ensemble of score generators.
-- [ ] **Phase 4 — award definitions**: outright vs joint first-place probabilities, top-5 tie handling, player eligibility applied at the award stage (the AFL API Brownlow endpoint exposes an `eligible` flag).
-- [ ] **Phase 5 — full backtest persistence**: allocation log-loss, multiclass Brier/calibration, CRPS and interval coverage (50/80/95%), award probabilities.
-- [ ] **Phase 6 — 2026 forecast**: post-round-24 conditional forecast with quantile reporting and a sensitivity range across defensible model specifications.
+- [x] **Phase 4 — award definitions**: outright first, joint first, first-or-joint and top-5 probabilities in the simulator; player eligibility still to apply at the award stage.
+- [x] **Phase 5 — full backtest persistence**: allocation log-loss, Brier, CRPS and interval coverage persisted per season.
+- [x] **Phase 6 — 2026 forecast**: post-round-24 conditional forecast with vote quantiles, first-or-joint probabilities and specification sensitivity in [`docs/forecast-2026.md`](docs/forecast-2026.md).
 
 Other follow-ups:
 

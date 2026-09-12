@@ -94,6 +94,9 @@ def simulate_season(
     leaders = totals == totals.max(axis=0, keepdims=True)
     summary["p_outright_first"] = (leaders & (leaders.sum(axis=0, keepdims=True) == 1)).mean(axis=1)
     summary["p_first_or_joint"] = leaders.mean(axis=1)
+    top_rank = min(5, totals.shape[0])
+    top5_threshold = np.sort(totals, axis=0)[-top_rank, :]
+    summary["p_top5"] = (totals >= top5_threshold[None, :]).mean(axis=1)
 
     return SeasonSimulation(
         season=int(frame[SEASON_COLUMN].iloc[0]),

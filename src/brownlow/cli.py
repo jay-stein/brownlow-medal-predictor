@@ -7,7 +7,7 @@ import json
 
 import pandas as pd
 
-from . import evaluate, features, ingest, model, paths, scores, simulate
+from . import evaluate, features, folds, ingest, model, paths, scores, simulate
 
 
 def run_audit() -> None:
@@ -215,6 +215,126 @@ def run_calibrate_effects(args: argparse.Namespace) -> None:
         print(f"\nWrote effect-scale outputs to {output_dir}")
 
 
+def run_forecast(args: argparse.Namespace) -> None:
+    """Simulate a season's count and report vote spreads and win probabilities."""
+    season = args.season
+    model_key = args.model
+    labelled = _load_labelled()
+
+    cached = scores.load_scores(season, model_key)
+    if cached is None or args.force:
+        print(f"training {model_key} scores for {season} (this trains on all earlier labels)...")
+        result = scores.train_season_scores(
+            labelled,
+            season,
+            model_key=model_key,
+            n_splits=args.n_splits,
+            num_boost_round=args.max_rounds,
+            early_stopping_rounds=args.early_stopping,
+            seed=args.seed,
+        )
+        scores.save_scores(result)
+        metadata = result.metadata
+        print(
+            f"  objective={metadata['objective']} best_round={metadata['best_round']} "
+            f"train rows={metadata['n_train_rows']}"
+        )
+        cached = result
+    frame = cached.frame
+
+    prior_frames = [
+        scores.load_scores(candidate, model_key).frame
+        for candidate in scores.cached_seasons(model_key)
+        if candidate < season
+    ]
+    tau, tau_matches = evaluate.fit_pooled_tau(prior_frames)
+
+    calibration_path = paths.PROCESSED_DIR / "evaluation" / f"calibrated_effect_scale_{model_key}.json"
+    if args.effect_scale is not None:
+        effect_scale = args.effect_scale
+    elif calibration_path.exists():
+        effect_scale = float(json.loads(calibration_path.read_text())["effect_scale"])
+    else:
+        effect_scale = 0.0
+
+    simulation = simulate.simulate_season(
+        frame, tau, effect_scale=effect_scale, n_sims=args.n_sims, seed=args.seed
+    )
+    players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
+
+    scales = [float(part) for part in args.sensitivity_scales.split(",")]
+    sensitivity = None
+    if len(scales) > 1:
+        parts = []
+        for scale in scales:
+            scenario = simulate.simulate_season(
+                frame, tau, effect_scale=scale, n_sims=args.n_sims, seed=args.seed
+            )
+            subset = scenario.players[
+                [
+                    "PLAYER_PLAYER_PLAYER_PLAYERID",
+                    "FULL_NAME",
+                    "sim_mean",
+                    "p_outright_first",
+                    "p_first_or_joint",
+                    "p_top5",
+                ]
+            ].copy()
+            subset["effect_scale"] = scale
+            parts.append(subset)
+        combined = pd.concat(parts, ignore_index=True)
+        sensitivity = (
+            combined.groupby(["PLAYER_PLAYER_PLAYER_PLAYERID", "FULL_NAME"], as_index=False)
+            .agg(
+                mean_votes_min=("sim_mean", "min"),
+                mean_votes_max=("sim_mean", "max"),
+                p_first_or_joint_min=("p_first_or_joint", "min"),
+                p_first_or_joint_max=("p_first_or_joint", "max"),
+            )
+        )
+
+    output_dir = paths.PROCESSED_DIR / "forecast"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    players.to_csv(output_dir / f"forecast_{season}_{model_key}.csv", index=False)
+    if sensitivity is not None:
+        sensitivity.to_csv(output_dir / f"forecast_{season}_{model_key}_sensitivity.csv", index=False)
+
+    columns = [
+        "FULL_NAME",
+        "TEAM_NAME",
+        "sim_mean",
+        "sim_median",
+        "sim_q05",
+        "sim_q95",
+        "p_outright_first",
+        "p_first_or_joint",
+        "p_top5",
+    ]
+    if sensitivity is not None:
+        players = players.merge(
+            sensitivity[
+                [
+                    "PLAYER_PLAYER_PLAYER_PLAYERID",
+                    "mean_votes_min",
+                    "mean_votes_max",
+                    "p_first_or_joint_min",
+                    "p_first_or_joint_max",
+                ]
+            ],
+            on="PLAYER_PLAYER_PLAYER_PLAYERID",
+            how="left",
+        )
+        columns += ["mean_votes_min", "mean_votes_max", "p_first_or_joint_min", "p_first_or_joint_max"]
+
+    print(
+        f"\n=== {season} Brownlow forecast ({model_key}, tau={tau:.3f} from {tau_matches} matches, "
+        f"effect scale={effect_scale}, {args.n_sims} simulations) ===\n"
+    )
+    with pd.option_context("display.width", 240, "display.max_columns", 40):
+        print(players.head(args.top)[columns].round(3).to_string(index=False))
+    print(f"\nWrote {output_dir / f'forecast_{season}_{model_key}.csv'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="brownlow")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -251,6 +371,21 @@ def main() -> None:
     effects.add_argument("--seed", type=int, default=42)
     effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.REGRESSION)
 
+    forecast = subparsers.add_parser(
+        "forecast", help="simulate a season's count and report probabilities"
+    )
+    forecast.add_argument("--season", type=int, default=folds.FORECAST_SEASON)
+    forecast.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+    forecast.add_argument("--n-sims", type=int, default=10000)
+    forecast.add_argument("--effect-scale", type=float, default=None)
+    forecast.add_argument("--sensitivity-scales", default="0,0.2,0.4")
+    forecast.add_argument("--top", type=int, default=20)
+    forecast.add_argument("--force", action="store_true", help="retrain scores even when cached")
+    forecast.add_argument("--n-splits", type=int, default=5)
+    forecast.add_argument("--max-rounds", type=int, default=3000)
+    forecast.add_argument("--early-stopping", type=int, default=100)
+    forecast.add_argument("--seed", type=int, default=42)
+
     args = parser.parse_args()
     if args.command == "audit":
         run_audit()
@@ -260,6 +395,8 @@ def main() -> None:
         run_evaluate(args)
     elif args.command == "calibrate-effects":
         run_calibrate_effects(args)
+    elif args.command == "forecast":
+        run_forecast(args)
 
 
 if __name__ == "__main__":
