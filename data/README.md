@@ -41,7 +41,7 @@ Notes:
 
 - The AFL API (Champion Data) player stats and results start in **2012**; Brownlow vote labels are available for **2012–2025**.
 - Centre bounce attendances (`extendedStats.centreBounceAttendances`) are only populated from **2021**; the pipeline keeps them as native-missing features so XGBoost handles the era.
-- Player per-quarter stats are **not** exposed by the AFL API; quarter-level features (e.g. fourth-quarter disposals) would need a different source.
+- **Player per-quarter stats are not publicly available.** The public AFL API returns match totals only and ignores period query parameters; the AFL's own period endpoints (`/cfs/afl/stats/match/...` and `/cfs/afl/periodStats/match/...`) return HTTP 403 Forbidden (Stats Pro premium), and the `statspro` host does not expose those paths publicly. fitzRoy, AFL Tables, Footywire, Squiggle and the public DFS Australia download all provide totals only. Fourth-quarter disposals would require a paid data provider.
 
 ## Processed outputs
 
