@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import RoundVotes from "./RoundVotes.jsx";
 import WormChart from "./WormChart.jsx";
 import { teamColor } from "./teams.js";
 
@@ -156,7 +157,7 @@ export default function App() {
                 className={mode === "round" ? "active" : ""}
                 onClick={() => setMode("round")}
               >
-                Round points
+                Round votes
               </button>
               {mode === "cumulative" ? (
                 <button
@@ -201,33 +202,48 @@ export default function App() {
           </div>
 
           <div className="chart-wrap">
-            <WormChart data={chartData} player={player} mode={mode} showPaths={showPaths} />
+            {mode === "cumulative" ? (
+              <WormChart data={chartData} player={player} showPaths={showPaths} />
+            ) : (
+              <RoundVotes player={player} rounds={data.rounds} />
+            )}
           </div>
 
           <div className="legend">
-            <span>
-              <i className="swatch outer" /> 90% band
-            </span>
-            <span>
-              <i className="swatch inner" /> 50% band
-            </span>
-            <span>
-              <i className="swatch median" /> median
-            </span>
             {mode === "cumulative" ? (
-              <span>
-                <i className="swatch mean" /> mean
-              </span>
+              <>
+                <span>
+                  <i className="swatch outer" /> 90% band
+                </span>
+                <span>
+                  <i className="swatch inner" /> 50% band
+                </span>
+                <span>
+                  <i className="swatch median" /> median
+                </span>
+                <span>
+                  <i className="swatch mean" /> mean
+                </span>
+                {showPaths ? (
+                  <span>
+                    <i className="swatch paths" /> sampled simulations
+                  </span>
+                ) : null}
+              </>
             ) : (
-              <span>
-                <i className="swatch median" /> mean points that round
-              </span>
+              <>
+                <span>
+                  <i className="swatch votes3" /> 3 votes
+                </span>
+                <span>
+                  <i className="swatch votes2" /> 2 votes
+                </span>
+                <span>
+                  <i className="swatch votes1" /> 1 vote
+                </span>
+                <span className="legend-note">brighter = more likely</span>
+              </>
             )}
-            {mode === "cumulative" && showPaths ? (
-              <span>
-                <i className="swatch paths" /> sampled simulations
-              </span>
-            ) : null}
           </div>
         </section>
       </main>

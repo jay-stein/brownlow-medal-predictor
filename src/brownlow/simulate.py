@@ -46,6 +46,9 @@ class SeasonSimulation:
     increment_mean: np.ndarray | None = None
     increment_quantiles: np.ndarray | None = None
     path_totals: np.ndarray | None = None
+    round_p1: np.ndarray | None = None
+    round_p2: np.ndarray | None = None
+    round_p3: np.ndarray | None = None
 
 
 def prepare_season(
@@ -118,6 +121,9 @@ def simulate_season(
     increment_mean = None
     increment_quantiles = None
     path_totals = None
+    round_p1 = None
+    round_p2 = None
+    round_p3 = None
 
     if track_rounds:
         rounds = sorted({round_number for round_number, _, _ in matches})
@@ -132,6 +138,9 @@ def simulate_season(
         path_rng = np.random.default_rng(seed + 1)
         path_index = path_rng.choice(n_sims, size=min(path_count, n_sims), replace=False)
         path_totals = np.zeros((n_players, len(rounds), len(path_index)), dtype=np.int16)
+        round_p1 = np.zeros((n_players, len(rounds)))
+        round_p2 = np.zeros((n_players, len(rounds)))
+        round_p3 = np.zeros((n_players, len(rounds)))
 
         ordered = sorted(matches, key=lambda entry: round_position[entry[0]])
         pointer = 0
@@ -150,6 +159,9 @@ def simulate_season(
             increment_quantiles[:, round_index, :] = np.quantile(
                 increment, ROUND_QUANTILES, axis=1
             ).T
+            round_p1[:, round_index] = (increment == 1).mean(axis=1)
+            round_p2[:, round_index] = (increment == 2).mean(axis=1)
+            round_p3[:, round_index] = (increment == 3).mean(axis=1)
             previous[:] = totals
     else:
         totals = np.zeros((n_players, n_sims), dtype=np.int32)
@@ -180,6 +192,9 @@ def simulate_season(
         increment_mean=increment_mean,
         increment_quantiles=increment_quantiles,
         path_totals=path_totals,
+        round_p1=round_p1,
+        round_p2=round_p2,
+        round_p3=round_p3,
     )
 
 
@@ -202,8 +217,8 @@ def forecast_export(
     """Build a compact JSON-ready payload for the interactive web visualisation."""
     if simulation.rounds is None or simulation.cumulative_quantiles is None:
         raise ValueError("run simulate_season(track_rounds=True) before exporting")
-    if simulation.path_totals is None:
-        raise ValueError("simulation is missing sampled paths")
+    if simulation.path_totals is None or simulation.round_p3 is None:
+        raise ValueError("simulation is missing sampled paths or round probabilities")
 
     position_of = {player_id: index for index, player_id in enumerate(simulation.players[PLAYER_COLUMN])}
     exported_players = []
@@ -243,6 +258,9 @@ def forecast_export(
                     "incMedian": [_rounded(value) for value in increment[:, 2]],
                     "incQ75": [_rounded(value) for value in increment[:, 3]],
                     "incQ95": [_rounded(value) for value in increment[:, 4]],
+                    "p1": [_rounded(value, 4) for value in simulation.round_p1[position]],
+                    "p2": [_rounded(value, 4) for value in simulation.round_p2[position]],
+                    "p3": [_rounded(value, 4) for value in simulation.round_p3[position]],
                     "paths": [
                         [int(value) for value in paths[:, index]]
                         for index in range(paths.shape[1])
