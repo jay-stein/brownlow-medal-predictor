@@ -2,6 +2,8 @@
 
 Predicts AFL Brownlow Medal votes for every game of a season, then simulates the count to estimate the winner, top pollers, and vote distributions.
 
+**Live 2026 forecast:** https://jay-stein.github.io/brownlow-medal-predictor/
+
 > **Redesign in progress** (branch `feat/2026-prediction`): the project is moving from the notebook regression pipeline to a probabilistic **Plackett–Luce allocation model** with explicitly calibrated uncertainty, evaluated on chronological, match-grouped backtests. See [Probabilistic pipeline](#probabilistic-pipeline-in-progress).
 
 ![2025 Brownlow XGBoost Prediction](result/brownlow_seaborn.png)
@@ -131,6 +133,8 @@ The app reads `web/public/forecast_2026.json`, which is regenerated with:
 uv run python -m brownlow.cli forecast --model ranking --season 2026 --n-sims 10000 \
   --web-json web/public/forecast_2026.json
 ```
+
+A hosted copy is deployed to GitHub Pages from `main` by [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml): https://jay-stein.github.io/brownlow-medal-predictor/
 
 Run the tests:
 
