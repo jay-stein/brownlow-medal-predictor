@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Agent tooling
+.copilot-tracking/
+
+# Large regenerable data extracts (see data/README.md and R/fitzroy_data_extract.Rmd)
+data/player_stats_*_fitzroy.csv
+data/team_stats_*_fitzroy.csv
+data/brownlow_stats_*_fitzroy.csv
+
+# Derived outputs
+models/ensemble_predictions.csv
+result/*.csv
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

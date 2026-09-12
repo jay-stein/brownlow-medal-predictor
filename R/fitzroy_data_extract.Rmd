@@ -1,0 +1,89 @@
+---
+title: "brownlow"
+output: html_document
+date: "2025-09-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(fitzRoy)
+
+```
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+results_2025 = fitzRoy::fetch_player_stats(season=2025)
+results_2024 = fitzRoy::fetch_player_stats(season=2024)
+results_2023 = fitzRoy::fetch_player_stats(season=2023)
+results_2022 = fitzRoy::fetch_player_stats(season=2022)
+results_2021 = fitzRoy::fetch_player_stats(season=2021)
+results_2020 = fitzRoy::fetch_player_stats(season=2020)
+results_2019 = fitzRoy::fetch_player_stats(season=2019)
+results_2018 = fitzRoy::fetch_player_stats(season=2018)
+```
+
+```{r}
+results_team_2025 = fitzRoy::fetch_results_afl(season=2025)
+results_team_2024 = fitzRoy::fetch_results_afl(season=2024)
+results_team_2023 = fitzRoy::fetch_results_afl(season=2023)
+results_team_2022 = fitzRoy::fetch_results_afl(season=2022)
+results_team_2021 = fitzRoy::fetch_results_afl(season=2021)
+results_team_2020 = fitzRoy::fetch_results_afl(season=2020)
+results_team_2019 = fitzRoy::fetch_results_afl(season=2019)
+results_team_2018 = fitzRoy::fetch_results_afl(season=2018)
+```
+
+
+
+
+
+
+```{r}
+a = fetch_results_afl(2025, round = 9)
+#b = fetch_results_footywire(2025, round = 9)
+c = fetch_results_afltables(2025, round = 9)
+#d = fetch_results_squiggle(2025, round = 9)
+d = fetch_results(season=2025, round =9, source="footywire")
+
+
+```
+
+
+
+```{r}
+#results_afltables_2025 <- fitzRoy::fetch_player_stats_afltables(season = 2025)
+results_afltables_2024 <- fitzRoy::fetch_player_stats_afltables(season = 2024)
+results_afltables_2023 <- fitzRoy::fetch_player_stats_afltables(season = 2023)
+results_afltables_2022 <- fitzRoy::fetch_player_stats_afltables(season = 2022)
+results_afltables_2021 <- fitzRoy::fetch_player_stats_afltables(season = 2021)
+results_afltables_2020 <- fitzRoy::fetch_player_stats_afltables(season = 2020)
+results_afltables_2019 <- fitzRoy::fetch_player_stats_afltables(season = 2019)
+results_afltables_2018 <- fitzRoy::fetch_player_stats_afltables(season = 2018)
+
+```
+## Compile stuff
+
+```{r}
+player_stats_all = dplyr::bind_rows(results_2025, results_2024, results_2023, results_2022, results_2021, results_2020, results_2019, results_2018)
+results_team_all = dplyr::bind_rows(results_team_2025, results_team_2024, results_team_2023, results_team_2022, results_team_2021, results_team_2020, results_team_2019, results_team_2018)
+player_brownlow_all = dplyr::bind_rows(results_afltables_2024, results_afltables_2023, results_afltables_2022, results_afltables_2021, results_afltables_2020, results_afltables_2019, results_afltables_2018)
+
+```
+
+
+```{r}
+file_path = r"(C:\Users\mrjay\python\jupyter_notebooks\Projects\brownlow\data)"
+write.csv(player_stats_all, paste0(file_path, r"(\player_stats_2018_2025_fitzroy.csv)"))
+
+weird_nested_list_cols = c("homeTeamScore.periodScore", "awayTeamScore.periodScore", "matchClock.periods")
+write.csv(results_team_all %>% dplyr::select(-weird_nested_list_cols), paste0(file_path, r"(\team_stats_2018_2025_fitzroy.csv)")) # drop the weird nested list
+write.csv(player_brownlow_all, paste0(file_path, r"(\brownlow_stats_2018_2024_fitzroy.csv)"))
+```
