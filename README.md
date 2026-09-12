@@ -29,16 +29,16 @@ The `src/brownlow/` package implements the redesign. Its first version keeps the
 
 Current data audit (2018–2024): **all 1,359 fixtures resolved**, every one of the 4,092 match recipients mapped, zero unmatched players, and only 5 genuinely missing AFL Tables rows quarantined.
 
-Chronological backtest (scores trained only on earlier seasons; `tau` fitted leak-free on earlier out-of-sample seasons):
+Chronological backtest (scores trained only on earlier seasons; `tau` fitted leak-free on earlier out-of-sample seasons). Two score generators are available via `--model`:
 
-| Season | leak-free tau | allocation NLL | NLL at tau=1 | uniform NLL | Brier | top-1 hit | top-3 slot overlap |
-|--------|---------------|----------------|--------------|-------------|-------|-----------|--------------------|
-| 2021 | 0.264 | 6.55 | 8.53 | 11.42 | 0.084 | 0.64 | 0.67 |
-| 2022 | 0.310 | 6.41 | 8.62 | 11.42 | 0.086 | 0.58 | 0.70 |
-| 2023 | 0.314 | 7.58 | 8.90 | 11.42 | 0.094 | 0.49 | 0.60 |
-| 2024 | 0.339 | 7.64 | 8.90 | 11.42 | 0.093 | 0.52 | 0.60 |
+| Season | regression NLL | ranking NLL | regression top-1 | ranking top-1 | ranking Brier |
+|--------|----------------|-------------|------------------|---------------|---------------|
+| 2021 | 6.55 | 4.91 | 0.64 | 0.71 | 0.075 |
+| 2022 | 6.41 | 4.49 | 0.58 | 0.66 | 0.074 |
+| 2023 | 7.58 | 6.20 | 0.49 | 0.47 | 0.090 |
+| 2024 | 7.64 | 5.77 | 0.52 | 0.50 | 0.085 |
 
-The fitted temperature nearly matches the per-season oracle and cuts NLL by 1.3–2.0 nats against unfitted scores. Season simulation with one persistent player-season effect (calibrated by contender CRPS) beats the hard 3/2/1 point forecast on CRPS, but 90% intervals for leading contenders still under-cover (0.47–0.93), showing the score generator compresses dominant seasons.
+The `ranking` model (`rank:ndcg` LambdaMART grouped by match, Phase 2c) improves every held-out probability metric over the pseudo-Huber baseline. Its leak-free temperature (~0.84–0.91) is stable and near-oracle, and contender season CRPS falls to 2.15–5.88 (from 3.83–7.89); contender 50% interval coverage rises from 0.07–0.33 to 0.07–0.53. The eventual winners in 2022 and 2023 are still ranked 6th–7th by the model, so award-level probabilities remain unreliable — the score generator misses persistent umpire-favourite effects that voting-history features could capture.
 
 ## Repository Structure
 
@@ -56,9 +56,12 @@ brownlow/
 │   ├── ingest.py                     # crosswalk + audited three-state labels
 │   ├── features.py                   # 120-feature engineering (ported verbatim)
 │   ├── folds.py                      # chronological, match-grouped folds
-│   ├── model.py                      # baseline XGBoost + explicit round selection
+│   ├── model.py                      # regression + ranking (LambdaMART) score generators
+│   ├── scores.py                     # cached per-season out-of-sample scores
+│   ├── evaluate.py                   # leak-free tau, NLL/Brier/CRPS/coverage metrics
+│   ├── simulate.py                   # persistent-effect season simulator
 │   ├── pl.py                         # Plackett-Luce NLL, tau fit, exact marginals
-│   └── cli.py                        # `python -m brownlow.cli audit`
+│   └── cli.py                        # audit / baseline / evaluate / calibrate-effects
 ├── tests/                            # unit tests for the new package
 ├── pyproject.toml                    # uv-managed project and dependencies
 └── README.md
@@ -81,9 +84,10 @@ uv run python -m brownlow.cli audit
 Run the chronological backtest (per-season scores are cached and reused):
 
 ```bash
-uv run python -m brownlow.cli baseline --seasons 2020-2024     # out-of-sample scores per season
-uv run python -m brownlow.cli evaluate --seasons 2020-2024     # leak-free tau + allocation metrics
-uv run python -m brownlow.cli calibrate-effects                # player-season effect scale grid
+uv run python -m brownlow.cli baseline --seasons 2020-2024                  # pseudo-Huber baseline
+uv run python -m brownlow.cli baseline --model ranking --seasons 2020-2024  # match-grouped LambdaMART
+uv run python -m brownlow.cli evaluate --model ranking --seasons 2020-2024  # leak-free tau + metrics
+uv run python -m brownlow.cli calibrate-effects --model ranking             # effect scale grid
 ```
 
 Run the tests:
@@ -156,6 +160,7 @@ Redesign phase status:
 - [x] **Phase 1 — data repair**: audited crosswalk, three-state labels, chronological match-grouped folds, train-only preprocessing, explicit CV round selection.
 - [x] **Phase 2a — allocation core**: Plackett–Luce NLL, temperature fitting, exact `P(0/1/2/3)` marginals, unit tested.
 - [x] **Phase 2b — allocation model**: per-season out-of-sample scores, leak-free `tau` on earlier folds, allocation log-loss and Brier backtests.
+- [x] **Phase 2c — allocation-aware score generator**: match-grouped LambdaMART (`rank:ndcg`) replacing pseudo-Huber; improves every held-out probability metric and contender season CRPS.
 - [x] **Phase 3a — persistent uncertainty**: player-season effect (one calibrated scale, contender-CRPS grid) and a shared simulator used for historical and future seasons.
 - [ ] **Phase 3b — model variation**: match-block bootstrap ensemble of score generators.
 - [ ] **Phase 4 — award definitions**: outright vs joint first-place probabilities, top-5 tie handling, player eligibility applied at the award stage (the AFL API Brownlow endpoint exposes an `eligible` flag).

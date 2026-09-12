@@ -7,7 +7,7 @@ import json
 
 import pandas as pd
 
-from . import evaluate, features, ingest, paths, scores, simulate
+from . import evaluate, features, ingest, model, paths, scores, simulate
 
 
 def run_audit() -> None:
@@ -57,17 +57,18 @@ def run_baseline(args: argparse.Namespace) -> None:
     """Generate (and cache) chronological out-of-sample scores per season."""
     labelled = _load_labelled()
     for season in parse_seasons(args.seasons):
-        cached = scores.load_scores(season)
+        cached = scores.load_scores(season, args.model)
         if cached is not None and not args.force:
             metadata = cached.metadata
             print(
-                f"{season}: cached | best_round={metadata['best_round']} | "
+                f"{args.model} {season}: cached | best_round={metadata['best_round']} | "
                 f"eval rows={metadata['n_eval_rows']}"
             )
             continue
         result = scores.train_season_scores(
             labelled,
             season,
+            model_key=args.model,
             n_splits=args.n_splits,
             num_boost_round=args.max_rounds,
             early_stopping_rounds=args.early_stopping,
@@ -75,18 +76,19 @@ def run_baseline(args: argparse.Namespace) -> None:
         )
         scores.save_scores(result)
         metadata = result.metadata
-        fold_mae = [round(value, 4) for value in metadata["fold_mae"]]
+        fold_scores = [round(value, 4) for value in metadata["fold_scores"]]
         print(
-            f"{season}: trained | best_round={metadata['best_round']} | "
-            f"fold_rounds={metadata['fold_best_iterations']} | fold_mae={fold_mae} | "
+            f"{args.model} {season}: trained | objective={metadata['objective']} | "
+            f"best_round={metadata['best_round']} | "
+            f"fold_rounds={metadata['fold_best_iterations']} | fold_scores={fold_scores} | "
             f"train rows={metadata['n_train_rows']}"
         )
 
 
-def _load_cached_scores() -> dict[int, pd.DataFrame]:
+def _load_cached_scores(model_key: str) -> dict[int, pd.DataFrame]:
     scores_by_season: dict[int, pd.DataFrame] = {}
-    for season in scores.cached_seasons():
-        cached = scores.load_scores(season)
+    for season in scores.cached_seasons(model_key):
+        cached = scores.load_scores(season, model_key)
         if cached is not None:
             scores_by_season[season] = cached.frame
     return scores_by_season
@@ -95,16 +97,19 @@ def _load_cached_scores() -> dict[int, pd.DataFrame]:
 def run_evaluate(args: argparse.Namespace) -> None:
     """Fit leak-free temperatures and report allocation metrics."""
     requested = parse_seasons(args.seasons)
-    scores_by_season = _load_cached_scores()
+    scores_by_season = _load_cached_scores(args.model)
     missing = [season for season in requested if season not in scores_by_season]
     if missing:
-        raise SystemExit(f"no cached scores for {missing}: run `baseline --seasons {missing[0]}` first")
+        raise SystemExit(
+            f"no cached {args.model} scores for {missing}: "
+            f"run `baseline --model {args.model} --seasons {missing[0]}` first"
+        )
 
     metrics, reliability = evaluate.evaluate_backtests(scores_by_season, seasons=requested)
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    metrics.to_csv(output_dir / "allocation_metrics.csv", index=False)
-    reliability.to_csv(output_dir / "reliability.csv", index=False)
+    metrics.to_csv(output_dir / f"allocation_metrics_{args.model}.csv", index=False)
+    reliability.to_csv(output_dir / f"reliability_{args.model}.csv", index=False)
 
     with pd.option_context("display.width", 220, "display.max_columns", 60):
         print(metrics.round(4).to_string(index=False))
@@ -113,11 +118,14 @@ def run_evaluate(args: argparse.Namespace) -> None:
 
 def run_calibrate_effects(args: argparse.Namespace) -> None:
     """Grid-search the player-season effect scale on historical season totals."""
-    scores_by_season = _load_cached_scores()
+    scores_by_season = _load_cached_scores(args.model)
     requested = parse_seasons(args.seasons)
     missing = [season for season in requested if season not in scores_by_season]
     if missing:
-        raise SystemExit(f"no cached scores for {missing}: run `baseline --seasons {missing[0]}` first")
+        raise SystemExit(
+            f"no cached {args.model} scores for {missing}: "
+            f"run `baseline --model {args.model} --seasons {missing[0]}` first"
+        )
 
     taus = {season: info["tau"] for season, info in evaluate.leak_free_taus(scores_by_season).items()}
     scales = [float(part) for part in args.scales.split(",")]
@@ -134,7 +142,7 @@ def run_calibrate_effects(args: argparse.Namespace) -> None:
     )
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    grid.to_csv(output_dir / "effect_scale_grid.csv", index=False)
+    grid.to_csv(output_dir / f"effect_scale_grid_{args.model}.csv", index=False)
 
     summary = (
         grid[grid["season"].isin(tune_seasons)]
@@ -148,11 +156,12 @@ def run_calibrate_effects(args: argparse.Namespace) -> None:
         .reset_index()
     )
     best_scale = float(summary.sort_values("mean_crps_contenders").iloc[0]["effect_scale"])
-    summary.to_csv(output_dir / "effect_scale_summary.csv", index=False)
-    (output_dir / "calibrated_effect_scale.json").write_text(
+    summary.to_csv(output_dir / f"effect_scale_summary_{args.model}.csv", index=False)
+    (output_dir / f"calibrated_effect_scale_{args.model}.json").write_text(
         json.dumps(
             {
                 "effect_scale": best_scale,
+                "model_key": args.model,
                 "selection_metric": "mean_crps_contenders",
                 "tune_seasons": tune_seasons,
                 "scales": scales,
@@ -180,7 +189,9 @@ def run_calibrate_effects(args: argparse.Namespace) -> None:
             n_sims=args.n_sims,
             seed=args.seed,
         )
-        simulation.players.to_csv(output_dir / f"season_simulation_{report}.csv", index=False)
+        simulation.players.to_csv(
+            output_dir / f"season_simulation_{args.model}_{report}.csv", index=False
+        )
         top = simulation.players.sort_values("sim_mean", ascending=False).head(10)
         columns = [
             "FULL_NAME",
@@ -211,6 +222,7 @@ def main() -> None:
         "baseline", help="train per-season baseline scores (chronological, cached)"
     )
     baseline.add_argument("--seasons", default="2020-2024", help="season or range, e.g. 2020-2024")
+    baseline.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.REGRESSION)
     baseline.add_argument("--force", action="store_true", help="retrain even when cached")
     baseline.add_argument("--n-splits", type=int, default=5)
     baseline.add_argument("--max-rounds", type=int, default=3000)
@@ -223,6 +235,7 @@ def main() -> None:
         default="2020-2024",
         help="evaluation seasons; earlier cached seasons are used to fit tau",
     )
+    evaluation.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.REGRESSION)
 
     effects = subparsers.add_parser(
         "calibrate-effects", help="grid-search the player-season effect scale"
@@ -233,6 +246,7 @@ def main() -> None:
     effects.add_argument("--n-sims", type=int, default=1000)
     effects.add_argument("--contenders", type=int, default=15)
     effects.add_argument("--seed", type=int, default=42)
+    effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.REGRESSION)
 
     args = parser.parse_args()
     if args.command == "audit":
