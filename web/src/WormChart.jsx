@@ -1,6 +1,5 @@
 import {
   Area,
-  Bar,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -10,60 +9,38 @@ import {
   YAxis,
 } from "recharts";
 
-function WormTooltip({ active, payload, label, mode }) {
+function WormTooltip({ active, payload, label }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0].payload;
   return (
     <div className="chart-tooltip">
       <div className="tooltip-title">{label}</div>
-      {mode === "cumulative" ? (
-        <>
-          <div className="tooltip-row">
-            <span>Median</span>
-            <b>{row.cumMedian}</b>
-          </div>
-          <div className="tooltip-row">
-            <span>Mean</span>
-            <b>{row.cumMean}</b>
-          </div>
-          <div className="tooltip-row">
-            <span>50% band</span>
-            <b>
-              {row.cumQ25} – {row.cumQ75}
-            </b>
-          </div>
-          <div className="tooltip-row">
-            <span>90% band</span>
-            <b>
-              {row.cumQ05} – {row.cumQ95}
-            </b>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="tooltip-row">
-            <span>Median points</span>
-            <b>{row.incMedian}</b>
-          </div>
-          <div className="tooltip-row">
-            <span>Mean points</span>
-            <b>{row.incMean}</b>
-          </div>
-          <div className="tooltip-row">
-            <span>90% range</span>
-            <b>
-              {row.incQ05} – {row.incQ95}
-            </b>
-          </div>
-        </>
-      )}
+      <div className="tooltip-row">
+        <span>Median</span>
+        <b>{row.cumMedian}</b>
+      </div>
+      <div className="tooltip-row">
+        <span>Mean</span>
+        <b>{row.cumMean}</b>
+      </div>
+      <div className="tooltip-row">
+        <span>50% band</span>
+        <b>
+          {row.cumQ25} – {row.cumQ75}
+        </b>
+      </div>
+      <div className="tooltip-row">
+        <span>90% band</span>
+        <b>
+          {row.cumQ05} – {row.cumQ95}
+        </b>
+      </div>
     </div>
   );
 }
 
-export default function WormChart({ data, player, mode, showPaths }) {
+export default function WormChart({ data, player, showPaths }) {
   const pathKeys = player?.rounds?.paths?.map((_, index) => `path_${index}`) ?? [];
-  const isCumulative = mode === "cumulative";
 
   return (
     <ResponsiveContainer width="100%" height={520}>
@@ -93,10 +70,10 @@ export default function WormChart({ data, player, mode, showPaths }) {
           width={44}
         />
         <Tooltip
-          content={<WormTooltip mode={mode} />}
+          content={<WormTooltip />}
           cursor={{ stroke: "rgba(246,226,122,0.35)", strokeDasharray: "4 4" }}
         />
-        {isCumulative && showPaths
+        {showPaths
           ? pathKeys.map((key) => (
               <Line
                 key={key}
@@ -110,74 +87,55 @@ export default function WormChart({ data, player, mode, showPaths }) {
               />
             ))
           : null}
-        {isCumulative ? (
-          <>
-            <Area
-              type="monotone"
-              dataKey="cumQ05"
-              stackId="outer"
-              stroke="none"
-              fill="transparent"
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="cumOuter"
-              stackId="outer"
-              stroke="none"
-              fill="url(#outerBand)"
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="cumQ25"
-              stackId="inner"
-              stroke="none"
-              fill="transparent"
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="cumInner"
-              stackId="inner"
-              stroke="none"
-              fill="url(#innerBand)"
-              isAnimationActive={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="cumMean"
-              stroke="#8ad1ff"
-              strokeDasharray="5 5"
-              strokeWidth={1.5}
-              dot={false}
-              isAnimationActive={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="cumMedian"
-              stroke="#ffe9a3"
-              strokeWidth={3}
-              dot={false}
-              isAnimationActive={false}
-            />
-          </>
-        ) : (
-          <>
-            <Bar dataKey="incQ05" stackId="outer" fill="transparent" isAnimationActive={false} />
-            <Bar dataKey="incOuter" stackId="outer" fill="url(#outerBand)" isAnimationActive={false} />
-            <Bar dataKey="incQ25" stackId="inner" fill="transparent" isAnimationActive={false} />
-            <Bar dataKey="incInner" stackId="inner" fill="url(#innerBand)" isAnimationActive={false} />
-            <Line
-              type="monotone"
-              dataKey="incMean"
-              stroke="#ffe9a3"
-              strokeWidth={2.5}
-              dot={{ r: 3, fill: "#ffe9a3", strokeWidth: 0 }}
-              isAnimationActive={false}
-            />
-          </>
-        )}
+        <Area
+          type="monotone"
+          dataKey="cumQ05"
+          stackId="outer"
+          stroke="none"
+          fill="transparent"
+          isAnimationActive={false}
+        />
+        <Area
+          type="monotone"
+          dataKey="cumOuter"
+          stackId="outer"
+          stroke="none"
+          fill="url(#outerBand)"
+          isAnimationActive={false}
+        />
+        <Area
+          type="monotone"
+          dataKey="cumQ25"
+          stackId="inner"
+          stroke="none"
+          fill="transparent"
+          isAnimationActive={false}
+        />
+        <Area
+          type="monotone"
+          dataKey="cumInner"
+          stackId="inner"
+          stroke="none"
+          fill="url(#innerBand)"
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="cumMean"
+          stroke="#8ad1ff"
+          strokeDasharray="5 5"
+          strokeWidth={1.5}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="cumMedian"
+          stroke="#ffe9a3"
+          strokeWidth={3}
+          dot={false}
+          isAnimationActive={false}
+        />
       </ComposedChart>
     </ResponsiveContainer>
   );

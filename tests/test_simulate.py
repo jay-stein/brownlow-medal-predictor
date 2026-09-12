@@ -115,6 +115,10 @@ def test_tracked_rounds_are_cumulative_and_match_parity():
     assert np.allclose(increment[:, 1], cumulative[:, 1] - cumulative[:, 0])
     assert simulation.path_totals.shape == (4, 2, 20)
     assert (np.diff(simulation.path_totals, axis=1) >= 0).all()
+    probabilities = simulation.round_p1 + simulation.round_p2 + simulation.round_p3
+    assert (probabilities >= 0).all()
+    assert (probabilities <= 1.0 + 1e-12).all()
+    assert simulation.round_p3.shape == (4, 2)
 
 
 def test_forecast_export_payload_shapes():
@@ -132,7 +136,10 @@ def test_forecast_export_payload_shapes():
     assert [entry["label"] for entry in payload["rounds"]] == ["OR", "R1"]
     assert len(payload["players"]) == 3
     leader = payload["players"][0]
-    assert {"cumMean", "cumMedian", "cumQ95", "incMean", "paths"} <= set(leader["rounds"])
+    assert {"cumMean", "cumMedian", "cumQ95", "incMean", "p1", "p2", "p3", "paths"} <= set(
+        leader["rounds"]
+    )
     assert len(leader["rounds"]["paths"]) == 10
     assert len(leader["rounds"]["paths"][0]) == 2
+    assert len(leader["rounds"]["p3"]) == 2
     assert leader["pFirstOrJoint"] == max(player["pFirstOrJoint"] for player in payload["players"])
