@@ -71,6 +71,7 @@ RAW_STAT_FEATURES = [
     "EXTENDEDSTATS_CONTESTOFFONEONONES",
     "EXTENDEDSTATS_CONTESTOFFWINS",
     "EXTENDEDSTATS_CONTESTOFFWINSPERCENTAGE",
+    "EXTENDEDSTATS_CENTREBOUNCEATTENDANCES",
 ]
 
 # The two kick-efficiency stats are absent from the notebook's proportion list.
@@ -90,10 +91,23 @@ ENGINEERED_FEATURES = [
     "PLAYERTEAM_OUTCOME",
 ]
 
+HEIGHT_FEATURES = ["PLAYER_HEIGHT", "HEIGHT_VS_POSITION"]
+
+# Features that are deliberately left missing for XGBoost to handle natively:
+# centre bounce attendances only exist from 2021, and heights are unavailable
+# for a small number of players.
+NATIVE_MISSING_FEATURES = [
+    "EXTENDEDSTATS_CENTREBOUNCEATTENDANCES",
+    "EXTENDEDSTATS_CENTREBOUNCEATTENDANCES_prop",
+    "PLAYER_HEIGHT",
+    "HEIGHT_VS_POSITION",
+]
+
 FEATURE_LIST = (
     [POSITION_FEATURE]
     + RAW_STAT_FEATURES
     + ENGINEERED_FEATURES
+    + HEIGHT_FEATURES
     + [f"{col}_prop" for col in PROPORTION_FEATURES]
 )
 
@@ -161,27 +175,86 @@ def add_proportion_features(df: pd.DataFrame) -> pd.DataFrame:
     )
     proportions = proportions.fillna(0)
     proportions.columns = [f"{col}_prop" for col in proportions.columns]
+    # Keep era-missing stats missing rather than pretending they are zero.
+    for column in PROPORTION_FEATURES:
+        prop_column = f"{column}_prop"
+        if prop_column in NATIVE_MISSING_FEATURES:
+            proportions[prop_column] = proportions[prop_column].where(df[column].notna())
     return pd.concat([df, proportions], axis=1)
+
+
+def add_height_features(df: pd.DataFrame, player_details: pd.DataFrame) -> pd.DataFrame:
+    """Attach player height and height relative to same-position peers in the match.
+
+    The squad endpoint reports one row per player-season with ``providerId``
+    (Champion Data id), ``position`` and ``heightInCm``.
+    """
+    details = normalise_columns(player_details)
+    details = details.rename(columns={"HEIGHTINCM": "HEIGHT_CM"})
+    details = details[["PROVIDERID", "SEASON", "POSITION", "HEIGHT_CM"]].copy()
+    details["HEIGHT_CM"] = pd.to_numeric(details["HEIGHT_CM"], errors="coerce")
+    details.loc[details["HEIGHT_CM"] <= 0, "HEIGHT_CM"] = pd.NA
+
+    out = df.copy()
+    out["SEASON_KEY"] = pd.to_datetime(out["GAME_DATE"]).dt.year
+    height_by_player = details.groupby("PROVIDERID")["HEIGHT_CM"].max()
+    out["PLAYER_HEIGHT"] = out["PLAYER_PLAYER_PLAYER_PLAYERID"].map(height_by_player)
+
+    positions = details.dropna(subset=["POSITION"]).drop_duplicates(["PROVIDERID", "SEASON"])
+    position_by_season = positions.set_index(["PROVIDERID", "SEASON"])["POSITION"]
+    player_id = out["PLAYER_PLAYER_PLAYER_PLAYERID"]
+    keys = pd.MultiIndex.from_arrays([player_id, out["SEASON_KEY"]])
+    out["POSITION_GROUP"] = position_by_season.reindex(keys).to_numpy()
+
+    latest_position = (
+        positions.sort_values("SEASON").drop_duplicates("PROVIDERID", keep="last")
+        .set_index("PROVIDERID")["POSITION"]
+    )
+    out["POSITION_GROUP"] = (
+        out["POSITION_GROUP"].fillna(player_id.map(latest_position)).fillna("UNKNOWN")
+    )
+
+    grouped = out.groupby(["PROVIDERID", "POSITION_GROUP"])["PLAYER_HEIGHT"]
+    group_sum = grouped.transform("sum")
+    group_count = grouped.transform("count")
+    peer_mean = (group_sum - out["PLAYER_HEIGHT"]) / (group_count - 1)
+    match_mean = out.groupby("PROVIDERID")["PLAYER_HEIGHT"].transform("mean")
+    out["HEIGHT_VS_POSITION"] = out["PLAYER_HEIGHT"] - peer_mean.where(
+        group_count > 1, match_mean
+    )
+    return out.drop(columns=["SEASON_KEY", "POSITION_GROUP"])
 
 
 def build_feature_table(
     player_stats: pd.DataFrame,
     team_stats: pd.DataFrame,
+    player_details: pd.DataFrame | None = None,
     train_through: int = 2025,
 ) -> pd.DataFrame:
     """Build the merged feature table (finals excluded, labels not yet attached).
 
     ``train_through`` controls which seasons inform the >5% NaN column drop so
     that no evaluation-season information leaks into feature selection.
+    Columns listed in :data:`NATIVE_MISSING_FEATURES` are kept regardless and
+    left missing for XGBoost to handle.
     """
     df = normalise_columns(player_stats)
     df = df[~df["ROUND_NAME"].astype(str).str.contains("Final", case=False, na=False)].copy()
     df["GAME_DATE"] = derive_game_date(df)
     df["FULL_NAME"] = add_full_name(df)
+    df["PLAYER_CAPTAIN"] = (
+        df["PLAYER_CAPTAIN"]
+        .map({True: 1, False: 0, "True": 1, "False": 0, "TRUE": 1, "FALSE": 0})
+        .astype(float)
+    )
 
     seasons = pd.to_datetime(df["GAME_DATE"]).dt.year
     reference = df[seasons <= train_through]
-    drop_cols = nan_fraction_columns(reference)
+    drop_cols = [
+        column
+        for column in nan_fraction_columns(reference)
+        if column not in NATIVE_MISSING_FEATURES
+    ]
     df = df.drop(columns=drop_cols)
 
     df["PLAYER_POINTS"] = df["GOALS"] * 6 + df["BEHINDS"]
@@ -196,6 +269,8 @@ def build_feature_table(
 
     df = add_team_context(df)
     df = add_proportion_features(df)
+    if player_details is not None:
+        df = add_height_features(df, player_details)
     return df
 
 
@@ -218,7 +293,9 @@ class FeaturePreprocessor:
 
     def fit(self, X: pd.DataFrame) -> FeaturePreprocessor:
         numeric = X.select_dtypes(include=["number"]).columns.tolist()
-        self.numeric_features_ = [col for col in numeric if col in FEATURE_LIST]
+        self.numeric_features_ = [
+            col for col in numeric if col in FEATURE_LIST and col not in NATIVE_MISSING_FEATURES
+        ]
         self.means_ = X[self.numeric_features_].mean()
         self.categories_ = {
             col: pd.Categorical(X[col]).categories for col in CATEGORICAL_FEATURES if col in X

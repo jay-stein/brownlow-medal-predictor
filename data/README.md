@@ -1,6 +1,6 @@
 # Data
 
-This folder holds the project datasets. The large raw extracts are **gitignored** (they total ~74 MB) and are regenerated with the R script in [`../R/fitzroy_data_extract.Rmd`](../R/fitzroy_data_extract.Rmd). Small prediction-source snapshots are committed so the pipeline can be re-run without re-scraping.
+This folder holds the project datasets. The large raw extracts are **gitignored** (they total well over 100 MB) and are regenerated with the R scripts in [`../R`](../R). Small prediction-source snapshots are committed so the pipeline can be re-run without re-scraping.
 
 ## Committed files
 
@@ -15,46 +15,41 @@ This folder holds the project datasets. The large raw extracts are **gitignored*
 
 ## Regenerating the large extracts
 
-The following files are produced by `fitzRoy` and are **not committed**:
-
 | File | Source |
 |------|--------|
-| `player_stats_2018_2025_fitzroy.csv` | `fitzRoy::fetch_player_stats()` (Champion Data) |
-| `team_stats_2018_2025_fitzroy.csv` | `fitzRoy::fetch_results_afl()` |
-| `brownlow_stats_2018_2024_fitzroy.csv` | `fitzRoy::fetch_player_stats_afltables()` (includes `Brownlow.Votes`) |
+| `player_stats_2012_2026_fitzroy.csv` | AFL API (Champion Data) via `fitzRoy::fetch_player_stats()`, 2012–2026 |
+| `team_stats_2012_2026_fitzroy.csv` | `fitzRoy::fetch_results_afl()`, 2012–2026 |
+| `brownlow_stats_2012_2025_fitzroy.csv` | AFL Tables via `fitzRoy::fetch_player_stats_afltables()`, includes `Brownlow.Votes` |
+| `player_details_2012_2026_afl.csv` | AFL API squads via `fitzRoy:::fetch_squad_afl()`: height and position per player-season |
 
-Steps:
-
-1. Install R (≥ 4.1) and the package:
-
-   ```r
-   install.packages("fitzRoy")
-   ```
-
-2. Open `R/fitzroy_data_extract.Rmd` and update the output `file_path` to this repository's `data/` folder:
-
-   ```r
-   file_path = "/path/to/brownlow-medal-predictor/data"
-   ```
-
-3. Knit or run all chunks. The script fetches seasons 2018–2025 and writes the three CSVs into `data/`.
-
-Alternatively, run equivalent commands directly:
+Run both scripts from the repository root:
 
 ```r
-library(fitzRoy)
-
-player_stats_all <- dplyr::bind_rows(
-  lapply(2018:2025, function(s) fitzRoy::fetch_player_stats(season = s))
-)
-team_stats_all <- dplyr::bind_rows(
-  lapply(2018:2025, function(s) fitzRoy::fetch_results_afl(season = s))
-)
-brownlow_votes_all <- dplyr::bind_rows(
-  lapply(2018:2024, function(s) fitzRoy::fetch_player_stats_afltables(season = s))
-)
-
-write.csv(player_stats_all, "data/player_stats_2018_2025_fitzroy.csv")
-write.csv(team_stats_all, "data/team_stats_2018_2025_fitzroy.csv")
-write.csv(brownlow_votes_all, "data/brownlow_stats_2018_2024_fitzroy.csv")
+# install.packages("fitzRoy")  # R >= 4.1
+source("R/extract_fitzroy.R")   # ~10 minutes: players, results, votes
+source("R/extract_squads.R")    # ~2 minutes: heights and positions
 ```
+
+Command line equivalent:
+
+```bash
+Rscript R/extract_fitzroy.R
+Rscript R/extract_squads.R
+```
+
+Notes:
+
+- The AFL API (Champion Data) player stats and results start in **2012**; Brownlow vote labels are available for **2012–2025**.
+- Centre bounce attendances (`extendedStats.centreBounceAttendances`) are only populated from **2021**; the pipeline keeps them as native-missing features so XGBoost handles the era.
+- Player per-quarter stats are **not** exposed by the AFL API; quarter-level features (e.g. fourth-quarter disposals) would need a different source.
+
+## Processed outputs
+
+`uv run python -m brownlow.cli audit` writes to `data/processed/`:
+
+- `player_crosswalk.csv` — Champion Data ↔ AFL Tables player id mapping with match scores
+- `label_audit_by_season.csv` — voted / genuine-zero / unresolved counts per season
+- `unmatched_players.csv`, `ambiguous_players.csv` — crosswalk audit trails
+- `labelled_player_games.parquet` — the feature table with three-state labels
+
+`baseline`, `evaluate` and `calibrate-effects` add per-season score caches and evaluation tables under `data/processed/scores/` and `data/processed/evaluation/`.

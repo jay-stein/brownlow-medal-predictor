@@ -38,6 +38,7 @@ class SeasonSimulation:
 def prepare_season(frame: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[np.ndarray, np.ndarray]]]:
     """Return the player table and per-match ``(player indices, utilities)``."""
     work = frame.copy()
+    work = work[work[PLAYER_COLUMN].notna()].copy()
     work["PLAYER_KEY"] = work[PLAYER_COLUMN].astype(str)
     players = (
         work.groupby("PLAYER_KEY", as_index=False)

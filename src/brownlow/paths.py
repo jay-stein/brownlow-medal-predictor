@@ -12,9 +12,10 @@ MODELS_DIR = ROOT / "models"
 RESULT_DIR = ROOT / "result"
 BACKCAST_DIR = ROOT / "backcast"
 
-PLAYER_STATS_CSV = DATA_DIR / "player_stats_2018_2025_fitzroy.csv"
-TEAM_STATS_CSV = DATA_DIR / "team_stats_2018_2025_fitzroy.csv"
-BROWNLOW_VOTES_CSV = DATA_DIR / "brownlow_stats_2018_2024_fitzroy.csv"
+PLAYER_STATS_CSV = DATA_DIR / "player_stats_2012_2026_fitzroy.csv"
+TEAM_STATS_CSV = DATA_DIR / "team_stats_2012_2026_fitzroy.csv"
+BROWNLOW_VOTES_CSV = DATA_DIR / "brownlow_stats_2012_2025_fitzroy.csv"
+PLAYER_DETAILS_CSV = DATA_DIR / "player_details_2012_2026_afl.csv"
 
 
 def ensure_dirs() -> None:

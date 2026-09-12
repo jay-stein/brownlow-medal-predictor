@@ -49,6 +49,10 @@ def load_brownlow_votes(path=None) -> pd.DataFrame:
     return pd.read_csv(path or paths.BROWNLOW_VOTES_CSV)
 
 
+def load_player_details(path=None) -> pd.DataFrame:
+    return pd.read_csv(path or paths.PLAYER_DETAILS_CSV)
+
+
 def _match_key(home_names: pd.Series, away_names: pd.Series) -> pd.Series:
     keys = [
         "|".join(sorted([normalise_team(home), normalise_team(away)]))
@@ -78,10 +82,13 @@ def _prepare_stats(player_stats: pd.DataFrame) -> pd.DataFrame:
 
 def _prepare_votes(votes: pd.DataFrame) -> pd.DataFrame:
     df = normalise_columns(votes)
+    season = df["SEASON"]
+    if isinstance(season, pd.DataFrame):
+        season = season.iloc[:, 0]
     return pd.DataFrame(
         {
             "vote_id": pd.to_numeric(df["ID"], errors="coerce").astype("Int64"),
-            "season": pd.to_numeric(df["SEASON"], errors="coerce").astype("Int64"),
+            "season": pd.to_numeric(season, errors="coerce").astype("Int64"),
             "game_date": pd.to_datetime(df["DATE"], errors="coerce").dt.date,
             "name_key": [
                 strip_name_suffix(compact_key(f"{first} {last}"))

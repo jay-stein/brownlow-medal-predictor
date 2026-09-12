@@ -17,34 +17,55 @@ Predicts AFL Brownlow Medal votes for every game of a season, then simulates the
 
 ## Probabilistic pipeline (in progress)
 
-The `src/brownlow/` package implements the redesign. Its first version keeps the existing 120 features and uses the current model's scores as a baseline utility generator, while replacing the loss, allocation layer, simulation structure, and backtesting protocol.
+The `src/brownlow/` package implements the redesign: 124 features (the original 120 plus centre-bounce attendances, player height, and height relative to same-position peers), two score generators, and calibrated season simulation.
 
 1. **Audited labels** — `ingest.py` builds a Champion Data ↔ AFL Tables player crosswalk (compact name keys, surname/team/date fallback, generational-suffix handling) and attaches **three-state labels**:
    - `voted` — matched to a resolved match record and polled votes
    - `zero` — matched to a resolved match record and polled no votes (a genuine zero)
    - `unresolved` — identity join failed or a match's recipients did not all map; **quarantined from training**, never silently treated as zero
-2. **Chronological, match-grouped evaluation** — `folds.py` trains on earlier seasons and evaluates on the next (`2018–20 → 2021`, …, final untouched `2018–24 → 2025`). Every match stays in one partition and preprocessing is fit on training seasons only.
+2. **Chronological, match-grouped evaluation** — `folds.py` trains on earlier seasons and evaluates on the next (development folds 2015–2024, final untouched `2012–24 → 2025`). Every match stays in one partition and preprocessing is fit on training seasons only.
 3. **Explicit round selection** — `model.py` runs match-grouped CV and takes the mean best iteration across folds, rather than relying on a truncated CV history.
 4. **Plackett–Luce allocation** — `pl.py` models each match as a distribution over ordered 3–2–1 triples, with a single temperature `tau` fitted on out-of-sample scores and exact `P(0/1/2/3)` marginals in closed form.
 
-Current data audit (2018–2024): **all 1,359 fixtures resolved**, every one of the 4,092 match recipients mapped, zero unmatched players, and only 5 genuinely missing AFL Tables rows quarantined.
+Data audit (2012–2025): **1,824 players crosswalked** across Champion Data and AFL Tables, **zero unmatched or ambiguous**, every fixture resolved, and only genuinely missing AFL Tables rows quarantined (5 in 2024, 83 in 2025). The extraction covers 14 label seasons (2012–2025) plus 2026 feature data.
 
-Chronological backtest (scores trained only on earlier seasons; `tau` fitted leak-free on earlier out-of-sample seasons). Two score generators are available via `--model`:
+Features added in this milestone: **centre bounce attendances** (2021+, left missing for earlier seasons so XGBoost handles the era), **player height**, and **height relative to same-position peers in the match**.
 
-| Season | regression NLL | ranking NLL | regression top-1 | ranking top-1 | ranking Brier |
-|--------|----------------|-------------|------------------|---------------|---------------|
-| 2021 | 6.55 | 4.91 | 0.64 | 0.71 | 0.075 |
-| 2022 | 6.41 | 4.49 | 0.58 | 0.66 | 0.074 |
-| 2023 | 7.58 | 6.20 | 0.49 | 0.47 | 0.090 |
-| 2024 | 7.64 | 5.77 | 0.52 | 0.50 | 0.085 |
+Chronological backtest (`--model ranking`; scores trained only on earlier seasons, `tau` fitted leak-free on earlier out-of-sample seasons), 2015–2025:
 
-The `ranking` model (`rank:ndcg` LambdaMART grouped by match, Phase 2c) improves every held-out probability metric over the pseudo-Huber baseline. Its leak-free temperature (~0.84–0.91) is stable and near-oracle, and contender season CRPS falls to 2.15–5.88 (from 3.83–7.89); contender 50% interval coverage rises from 0.07–0.33 to 0.07–0.53. The eventual winners in 2022 and 2023 are still ranked 6th–7th by the model, so award-level probabilities remain unreliable — the score generator misses persistent umpire-favourite effects that voting-history features could capture.
+| Season | allocation NLL | skill vs uniform | top-1 hit | top-3 slot overlap |
+|--------|----------------|------------------|-----------|--------------------|
+| 2015 | 5.08 | 0.55 | 0.59 | 0.66 |
+| 2016 | 4.64 | 0.59 | 0.63 | 0.69 |
+| 2017 | 4.58 | 0.59 | 0.60 | 0.69 |
+| 2018 | 4.83 | 0.57 | 0.55 | 0.69 |
+| 2019 | 4.53 | 0.60 | 0.61 | 0.70 |
+| 2020 | 5.62 | 0.50 | 0.57 | 0.64 |
+| 2021 | 4.79 | 0.58 | 0.67 | 0.69 |
+| 2022 | 4.36 | 0.62 | 0.62 | 0.70 |
+| 2023 | 6.16 | 0.46 | 0.51 | 0.60 |
+| 2024 | 5.80 | 0.49 | 0.52 | 0.61 |
+| 2025 | 5.50 | 0.52 | 0.51 | 0.64 |
+
+Season spread calibration (persistent player-season effect at the calibrated scale 0.4; contender set = observed top-15):
+
+| Metric | Result |
+|--------|--------|
+| Contender 90% interval coverage | mean **0.885** (nominal 0.90; range 0.73–1.00) |
+| Contender 50% interval coverage | mean **0.486** (nominal 0.50) |
+| Simulated-vs-observed Spearman correlation | 0.73–0.78 in every season |
+| Favourite (highest simulated mean) won | 5 of 11 seasons |
+| Eventual winner's mean P(win) | **0.36** (range 0.02–0.94) |
+
+The model is honest rather than decisive: the eventual winner carried a 36% average pre-count probability and was ranked first in 5 of 11 seasons. The 2024 and 2025 winners (45 and 39 votes) were over-performers the model ranked 2nd and 9th, yet contender intervals still covered 73% and 87% of that season's leading players.
 
 ## Repository Structure
 
 ```text
 brownlow/
-├── R/fitzroy_data_extract.Rmd        # fitzRoy download script (run first)
+├── R/extract_fitzroy.R               # fitzRoy extraction: players, results, votes
+├── R/extract_squads.R                # AFL API squads: height and position
+├── R/fitzroy_data_extract.Rmd        # original extraction document
 ├── archive/                          # original 2022 notebook
 ├── backcast/                         # legacy backtest leaderboards
 ├── data/                             # raw inputs + processed outputs (gitignored)
@@ -54,7 +75,7 @@ brownlow/
 ├── result/                           # legacy Monte Carlo outputs and plots
 ├── src/brownlow/                     # uv-managed pipeline package
 │   ├── ingest.py                     # crosswalk + audited three-state labels
-│   ├── features.py                   # 120-feature engineering (ported verbatim)
+│   ├── features.py                   # 124-feature engineering (incl. CBA and height)
 │   ├── folds.py                      # chronological, match-grouped folds
 │   ├── model.py                      # regression + ranking (LambdaMART) score generators
 │   ├── scores.py                     # cached per-season out-of-sample scores
@@ -84,9 +105,8 @@ uv run python -m brownlow.cli audit
 Run the chronological backtest (per-season scores are cached and reused):
 
 ```bash
-uv run python -m brownlow.cli baseline --seasons 2020-2024                  # pseudo-Huber baseline
-uv run python -m brownlow.cli baseline --model ranking --seasons 2020-2024  # match-grouped LambdaMART
-uv run python -m brownlow.cli evaluate --model ranking --seasons 2020-2024  # leak-free tau + metrics
+uv run python -m brownlow.cli baseline --model ranking --seasons 2013-2025  # out-of-sample scores
+uv run python -m brownlow.cli evaluate --model ranking --seasons 2015-2025  # leak-free tau + metrics
 uv run python -m brownlow.cli calibrate-effects --model ranking             # effect scale grid
 ```
 
@@ -113,9 +133,10 @@ The large raw datasets are **not committed** — they are regenerated with `fitz
 
 | Regenerated locally (gitignored) | Source |
 |----------------------------------|--------|
-| `player_stats_2018_2025_fitzroy.csv` | Champion Data via `fitzRoy::fetch_player_stats()` |
-| `team_stats_2018_2025_fitzroy.csv` | `fitzRoy::fetch_results_afl()` |
-| `brownlow_stats_2018_2024_fitzroy.csv` | AFL Tables via `fitzRoy::fetch_player_stats_afltables()` (includes `Brownlow.Votes`) |
+| `player_stats_2012_2026_fitzroy.csv` | Champion Data via `fitzRoy::fetch_player_stats()` (AFL API, 2012+) |
+| `team_stats_2012_2026_fitzroy.csv` | `fitzRoy::fetch_results_afl()` |
+| `brownlow_stats_2012_2025_fitzroy.csv` | AFL Tables via `fitzRoy::fetch_player_stats_afltables()` (includes `Brownlow.Votes`) |
+| `player_details_2012_2026_afl.csv` | AFL API squads (`fetch_squad_afl`): height and position per player-season |
 
 Processed artifacts are written to `data/processed/` by `brownlow.cli audit`: the player crosswalk, the per-season label audit, unmatched/ambiguous player lists, and `labelled_player_games.parquet`.
 
@@ -162,6 +183,7 @@ Redesign phase status:
 - [x] **Phase 2b — allocation model**: per-season out-of-sample scores, leak-free `tau` on earlier folds, allocation log-loss and Brier backtests.
 - [x] **Phase 2c — allocation-aware score generator**: match-grouped LambdaMART (`rank:ndcg`) replacing pseudo-Huber; improves every held-out probability metric and contender season CRPS.
 - [x] **Phase 3a — persistent uncertainty**: player-season effect (one calibrated scale, contender-CRPS grid) and a shared simulator used for historical and future seasons.
+- [x] **Phase 1b — extended history and features**: 14 label seasons (2012–2025) via `R/extract_fitzroy.R` and height/position squads via `R/extract_squads.R`; centre-bounce attendances and height features; 11-season spread calibration (contender 90% coverage 0.885).
 - [ ] **Phase 3b — model variation**: match-block bootstrap ensemble of score generators.
 - [ ] **Phase 4 — award definitions**: outright vs joint first-place probabilities, top-5 tie handling, player eligibility applied at the award stage (the AFL API Brownlow endpoint exposes an `eligible` flag).
 - [ ] **Phase 5 — full backtest persistence**: allocation log-loss, multiclass Brier/calibration, CRPS and interval coverage (50/80/95%), award probabilities.

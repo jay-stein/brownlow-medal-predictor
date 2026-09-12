@@ -21,18 +21,19 @@ class Fold:
     eval_season: int
 
 
-DEV_FOLDS: tuple[Fold, ...] = (
-    Fold("dev_2021", (2018, 2019, 2020), 2021),
-    Fold("dev_2022", (2018, 2019, 2020, 2021), 2022),
-    Fold("dev_2023", (2018, 2019, 2020, 2021, 2022), 2023),
-    Fold("dev_2024", (2018, 2019, 2020, 2021, 2022, 2023), 2024),
+FIRST_LABEL_SEASON = 2012
+
+# Development folds: evaluate on the next season after all earlier labels.
+DEV_FOLDS: tuple[Fold, ...] = tuple(
+    Fold(f"dev_{year}", tuple(range(FIRST_LABEL_SEASON, year)), year)
+    for year in range(2015, 2025)
 )
 
-FINAL_FOLD = Fold("final_2025", tuple(range(2018, 2025)), 2025)
+FINAL_FOLD = Fold("final_2025", tuple(range(FIRST_LABEL_SEASON, 2025)), 2025)
 
 # The production fit includes the final evaluation season once it has been
 # used, so future forecasts train on every available label season.
-PRODUCTION_SEASONS: tuple[int, ...] = tuple(range(2018, 2026))
+PRODUCTION_SEASONS: tuple[int, ...] = tuple(range(FIRST_LABEL_SEASON, 2026))
 FORECAST_SEASON = 2026
 
 

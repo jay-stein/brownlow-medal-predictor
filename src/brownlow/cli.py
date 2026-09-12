@@ -17,8 +17,11 @@ def run_audit() -> None:
     player_stats = ingest.load_player_stats()
     team_stats = ingest.load_team_stats()
     votes = ingest.load_brownlow_votes()
+    player_details = ingest.load_player_details()
 
-    table = features.build_feature_table(player_stats, team_stats, train_through=2025)
+    table = features.build_feature_table(
+        player_stats, team_stats, player_details=player_details, train_through=2025
+    )
     crosswalk = ingest.build_crosswalk(player_stats, votes)
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
 
