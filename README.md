@@ -159,7 +159,6 @@ Redesign phase status:
 - [x] **Phase 3a — persistent uncertainty**: player-season effect (one calibrated scale, contender-CRPS grid) and a shared simulator used for historical and future seasons.
 - [ ] **Phase 3b — model variation**: match-block bootstrap ensemble of score generators.
 - [ ] **Phase 4 — award definitions**: outright vs joint first-place probabilities, top-5 tie handling, player eligibility applied at the award stage (the AFL API Brownlow endpoint exposes an `eligible` flag).
-- [ ] **Phase 4 — award definitions**: outright vs joint first-place probabilities, top-5 tie handling, player eligibility applied at the award stage (the AFL API Brownlow endpoint exposes an `eligible` flag).
 - [ ] **Phase 5 — full backtest persistence**: allocation log-loss, multiclass Brier/calibration, CRPS and interval coverage (50/80/95%), award probabilities.
 - [ ] **Phase 6 — 2026 forecast**: post-round-24 conditional forecast with quantile reporting and a sensitivity range across defensible model specifications.
 
