@@ -27,7 +27,18 @@ The `src/brownlow/` package implements the redesign. Its first version keeps the
 3. **Explicit round selection** — `model.py` runs match-grouped CV and takes the mean best iteration across folds, rather than relying on a truncated CV history.
 4. **Plackett–Luce allocation** — `pl.py` models each match as a distribution over ordered 3–2–1 triples, with a single temperature `tau` fitted on out-of-sample scores and exact `P(0/1/2/3)` marginals in closed form.
 
-Current data audit (2018–2024): **all 1,359 fixtures resolved**, every one of the 4,092 match recipients mapped, zero unmatched players, and only 5 genuinely missing AFL Tables rows quarantined. A reduced-round smoke test on the 2024 fold selected 94 boosting rounds, fitted `tau = 0.41`, improved mean per-match allocation log-loss from 8.90 to 7.52, and recovered 60.2% of actual top-3 slots with the baseline scores.
+Current data audit (2018–2024): **all 1,359 fixtures resolved**, every one of the 4,092 match recipients mapped, zero unmatched players, and only 5 genuinely missing AFL Tables rows quarantined.
+
+Chronological backtest (scores trained only on earlier seasons; `tau` fitted leak-free on earlier out-of-sample seasons):
+
+| Season | leak-free tau | allocation NLL | NLL at tau=1 | uniform NLL | Brier | top-1 hit | top-3 slot overlap |
+|--------|---------------|----------------|--------------|-------------|-------|-----------|--------------------|
+| 2021 | 0.264 | 6.55 | 8.53 | 11.42 | 0.084 | 0.64 | 0.67 |
+| 2022 | 0.310 | 6.41 | 8.62 | 11.42 | 0.086 | 0.58 | 0.70 |
+| 2023 | 0.314 | 7.58 | 8.90 | 11.42 | 0.094 | 0.49 | 0.60 |
+| 2024 | 0.339 | 7.64 | 8.90 | 11.42 | 0.093 | 0.52 | 0.60 |
+
+The fitted temperature nearly matches the per-season oracle and cuts NLL by 1.3–2.0 nats against unfitted scores. Season simulation with one persistent player-season effect (calibrated by contender CRPS) beats the hard 3/2/1 point forecast on CRPS, but 90% intervals for leading contenders still under-cover (0.47–0.93), showing the score generator compresses dominant seasons.
 
 ## Repository Structure
 
@@ -65,6 +76,14 @@ Rebuild the audited dataset (crosswalk + three-state labels → `data/processed/
 
 ```bash
 uv run python -m brownlow.cli audit
+```
+
+Run the chronological backtest (per-season scores are cached and reused):
+
+```bash
+uv run python -m brownlow.cli baseline --seasons 2020-2024     # out-of-sample scores per season
+uv run python -m brownlow.cli evaluate --seasons 2020-2024     # leak-free tau + allocation metrics
+uv run python -m brownlow.cli calibrate-effects                # player-season effect scale grid
 ```
 
 Run the tests:
@@ -136,8 +155,10 @@ Redesign phase status:
 
 - [x] **Phase 1 — data repair**: audited crosswalk, three-state labels, chronological match-grouped folds, train-only preprocessing, explicit CV round selection.
 - [x] **Phase 2a — allocation core**: Plackett–Luce NLL, temperature fitting, exact `P(0/1/2/3)` marginals, unit tested.
-- [ ] **Phase 2b — allocation model**: generate per-fold frozen scores, fit `tau` leak-free on earlier folds, backtest allocation log-loss.
-- [ ] **Phase 3 — persistent uncertainty**: player-season effect scale (empirical grid), match-block bootstrap model ensemble, one shared simulator for historical and 2026 forecasts.
+- [x] **Phase 2b — allocation model**: per-season out-of-sample scores, leak-free `tau` on earlier folds, allocation log-loss and Brier backtests.
+- [x] **Phase 3a — persistent uncertainty**: player-season effect (one calibrated scale, contender-CRPS grid) and a shared simulator used for historical and future seasons.
+- [ ] **Phase 3b — model variation**: match-block bootstrap ensemble of score generators.
+- [ ] **Phase 4 — award definitions**: outright vs joint first-place probabilities, top-5 tie handling, player eligibility applied at the award stage (the AFL API Brownlow endpoint exposes an `eligible` flag).
 - [ ] **Phase 4 — award definitions**: outright vs joint first-place probabilities, top-5 tie handling, player eligibility applied at the award stage (the AFL API Brownlow endpoint exposes an `eligible` flag).
 - [ ] **Phase 5 — full backtest persistence**: allocation log-loss, multiclass Brier/calibration, CRPS and interval coverage (50/80/95%), award probabilities.
 - [ ] **Phase 6 — 2026 forecast**: post-round-24 conditional forecast with quantile reporting and a sensitivity range across defensible model specifications.
