@@ -231,7 +231,7 @@ Other follow-ups:
 
 ## Licence and attribution
 
-Released under the [MIT License](LICENSE). The MIT license covers the code and documentation; the underlying football data belongs to its providers and remains subject to their terms. Small prediction-source snapshots are committed only for reproducibility.
+Released under the [MIT License](LICENSE); data attribution is in [NOTICE.md](NOTICE.md). The MIT license covers the code and documentation; the underlying football data belongs to its providers and remains subject to their terms. Small prediction-source snapshots are committed only for reproducibility.
 
 - AFL player statistics, match results and squad details via the AFL API (Champion Data), fetched with [`fitzRoy`](https://github.com/jimmyday12/fitzRoy) — the excellent R package by [James Day](https://github.com/jimmyday12) and contributors.
 - Historical player statistics and Brownlow votes via [AFL Tables](https://afltables.com), also fetched with `fitzRoy`.
