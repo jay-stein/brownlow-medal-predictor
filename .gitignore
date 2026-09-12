@@ -17,6 +17,7 @@ data/team_stats_*_fitzroy.csv
 data/brownlow_stats_*_fitzroy.csv
 
 # Derived outputs
+data/processed/
 models/ensemble_predictions.csv
 result/*.csv
 
