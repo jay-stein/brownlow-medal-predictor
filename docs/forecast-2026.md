@@ -6,6 +6,7 @@
 **Persistent player effect:** scale 0.4, calibrated by contender CRPS on 2015–2023
 **Simulations:** 10,000 Plackett–Luce season draws
 **Raw outputs:** `data/processed/forecast/forecast_2026_ranking.csv` and `..._sensitivity.csv`
+**Interactive version:** [`web/`](../web) — run `cd web && npm install && npm run dev` to explore the worms, bands and simulation overlays
 
 | Player | Team | Exp. votes | 90% interval | P(outright) | P(joint) | P(first or joint) | P(top 5) | Spec sensitivity (first or joint) |
 |---|---|---|---|---|---|---|---|---|

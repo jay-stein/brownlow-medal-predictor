@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 import pandas as pd
 
@@ -258,7 +259,13 @@ def run_forecast(args: argparse.Namespace) -> None:
         effect_scale = 0.0
 
     simulation = simulate.simulate_season(
-        frame, tau, effect_scale=effect_scale, n_sims=args.n_sims, seed=args.seed
+        frame,
+        tau,
+        effect_scale=effect_scale,
+        n_sims=args.n_sims,
+        seed=args.seed,
+        track_rounds=args.web_json is not None,
+        path_count=args.web_paths,
     )
     players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
 
@@ -334,6 +341,27 @@ def run_forecast(args: argparse.Namespace) -> None:
         print(players.head(args.top)[columns].round(3).to_string(index=False))
     print(f"\nWrote {output_dir / f'forecast_{season}_{model_key}.csv'}")
 
+    if args.web_json is not None:
+        payload = simulate.forecast_export(
+            simulation,
+            players,
+            top=args.web_players,
+            metadata={
+                "season": season,
+                "model": model_key,
+                "tau": round(tau, 4),
+                "tauMatches": tau_matches,
+                "effectScale": effect_scale,
+                "nSims": args.n_sims,
+                "generated": pd.Timestamp.now().strftime("%Y-%m-%d"),
+                "sensitivityScales": scales,
+            },
+        )
+        web_path = Path(args.web_json)
+        web_path.parent.mkdir(parents=True, exist_ok=True)
+        web_path.write_text(json.dumps(payload, separators=(",", ":")))
+        print(f"Wrote web visualisation data to {web_path}")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="brownlow")
@@ -380,6 +408,9 @@ def main() -> None:
     forecast.add_argument("--effect-scale", type=float, default=None)
     forecast.add_argument("--sensitivity-scales", default="0,0.2,0.4")
     forecast.add_argument("--top", type=int, default=20)
+    forecast.add_argument("--web-json", default=None, help="write JSON for the interactive web app")
+    forecast.add_argument("--web-players", type=int, default=60)
+    forecast.add_argument("--web-paths", type=int, default=60)
     forecast.add_argument("--force", action="store_true", help="retrain scores even when cached")
     forecast.add_argument("--n-splits", type=int, default=5)
     forecast.add_argument("--max-rounds", type=int, default=3000)

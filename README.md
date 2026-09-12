@@ -84,6 +84,7 @@ brownlow/
 │   ├── pl.py                         # Plackett-Luce NLL, tau fit, exact marginals
 │   └── cli.py                        # audit / baseline / evaluate / calibrate-effects
 ├── tests/                            # unit tests for the new package
+├── web/                              # interactive React forecast visualisation
 ├── pyproject.toml                    # uv-managed project and dependencies
 └── README.md
 ```
@@ -112,6 +113,24 @@ uv run python -m brownlow.cli forecast --model ranking --season 2026        # se
 ```
 
 The 2026 forecast is written up in [`docs/forecast-2026.md`](docs/forecast-2026.md).
+
+### Interactive visualisation
+
+The `web/` folder contains a React app for exploring the forecast: choose any contender to see their cumulative vote worm with 50% and 90% uncertainty bands, overlay the sampled simulations, and switch to per-round points.
+
+```bash
+cd web
+npm install
+npm run dev        # local dev server
+npm run build      # static build in web/dist
+```
+
+The app reads `web/public/forecast_2026.json`, which is regenerated with:
+
+```bash
+uv run python -m brownlow.cli forecast --model ranking --season 2026 --n-sims 10000 \
+  --web-json web/public/forecast_2026.json
+```
 
 Run the tests:
 
