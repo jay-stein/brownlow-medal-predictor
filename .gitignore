@@ -11,14 +11,20 @@ venv/
 # Agent tooling
 .copilot-tracking/
 
-# Large regenerable data extracts (see data/README.md and R/fitzroy_data_extract.Rmd)
+# Large regenerable data extracts (see data/README.md and R/)
 data/player_stats_*_fitzroy.csv
 data/team_stats_*_fitzroy.csv
 data/brownlow_stats_*_fitzroy.csv
+data/player_details_*_afl.csv
 
 # Derived outputs
+data/processed/
 models/ensemble_predictions.csv
 result/*.csv
+
+# Web app
+web/node_modules/
+web/dist/
 
 # OS / editor
 .DS_Store
