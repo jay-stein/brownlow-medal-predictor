@@ -53,12 +53,15 @@ function mentionsTopPick(match) {
   return report.text.toLowerCase().includes(surname);
 }
 
-function MatchCard({ match }) {
+export function MatchCard({ match, focusTeam = null }) {
   const [expanded, setExpanded] = useState(false);
   const homeWon = match.homeScore > match.awayScore;
   const top = match.votes?.[0];
   const votes = match.votes ?? [];
   const triples = match.triples ?? [];
+  const orderedVotes = focusTeam
+    ? [...votes.filter((vote) => vote.team === focusTeam), ...votes.filter((vote) => vote.team !== focusTeam)]
+    : votes;
   return (
     <article className="match-card">
       <header>
@@ -69,14 +72,14 @@ function MatchCard({ match }) {
         </span>
       </header>
       <h3 className="match-score">
-        <span className={homeWon ? "winner" : ""}>
+        <span className={[homeWon ? "winner" : "", match.home === focusTeam ? "focus-team" : ""].join(" ").trim()}>
           <TeamLogo team={match.home} size={18} />
           {match.home}
         </span>
         <b>
           {match.homeScore ?? "—"}–{match.awayScore ?? "—"}
         </b>
-        <span className={!homeWon ? "winner" : ""}>
+        <span className={[!homeWon ? "winner" : "", match.away === focusTeam ? "focus-team" : ""].join(" ").trim()}>
           {match.away}
           <TeamLogo team={match.away} size={18} />
         </span>
@@ -104,9 +107,11 @@ function MatchCard({ match }) {
           <span title="Probability of receiving 1 vote">1</span>
           <span>Game</span>
         </div>
-        {(expanded ? votes : votes.slice(0, 4)).map((vote) => (
+        {(expanded ? orderedVotes : orderedVotes.slice(0, 4)).map((vote) => (
           <div
-            className={vote.id === top?.id ? "vote-row top" : "vote-row"}
+            className={`vote-row${vote.id === top?.id ? " top" : ""}${
+              vote.team === focusTeam ? " focus" : ""
+            }`}
             key={vote.id}
           >
             <span className="vote-player">

@@ -23,3 +23,5 @@ combined variant is worse than either block alone, so promote the season aggrega
 - [x] **Nerdy Stuff page** with the full method, rolling performance, model comparison, shortcomings and references.
 - [x] **Top 10 race** promoted to its own page with a summary table.
 - [x] **Expandable match tiles** showing the fuller official report excerpt, all vote candidates and alternative exact triples.
+- [x] **Matches by Team** page with club chips and the selected club's players grouped first and highlighted.
+- [x] **Past Winners** page: 2018–2025 rolling forecasts vs actual medallists, with hit/miss cards and summary stats.
