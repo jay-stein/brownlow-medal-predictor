@@ -17,8 +17,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.special import logsumexp
 
-from . import evaluate
+from . import evaluate, pl
 from .scores import UTILITY_COLUMN
 
 VOTE_COLUMN = "BROWNLOW_VOTES_AUDITED"
@@ -51,10 +52,24 @@ class SeasonSimulation:
     round_p3: np.ndarray | None = None
 
 
+@dataclass
+class MatchGroup:
+    round_number: int
+    indices: np.ndarray
+    utilities: np.ndarray
+    triple: tuple[int, int, int] | None
+
+
 def prepare_season(
     frame: pd.DataFrame,
-) -> tuple[pd.DataFrame, list[tuple[int, np.ndarray, np.ndarray]]]:
-    """Return the player table and per-match ``(round, player indices, utilities)``."""
+) -> tuple[pd.DataFrame, list[MatchGroup]]:
+    """Return the player table and per-match groups.
+
+    ``indices`` are positions into the player table, ``utilities`` are the
+    match's scored player-games, and ``triple`` is the observed ordered 3-2-1
+    recipient positions when the match has an evaluable label (``None``
+    otherwise).
+    """
     work = frame.copy()
     work = work[work[PLAYER_COLUMN].notna()].copy()
     work["PLAYER_KEY"] = work[PLAYER_COLUMN].astype(str)
@@ -67,12 +82,18 @@ def prepare_season(
     players = players.rename(columns={"PLAYER_KEY": PLAYER_COLUMN})
 
     positions = {key: index for index, key in enumerate(players[PLAYER_COLUMN])}
-    matches: list[tuple[int, np.ndarray, np.ndarray]] = []
+    matches: list[MatchGroup] = []
     for _, group in work.groupby(MATCH_COLUMN, sort=False):
         indices = np.array([positions[key] for key in group["PLAYER_KEY"]], dtype=int)
         utilities = group[UTILITY_COLUMN].to_numpy(dtype=float)
         round_number = int(group[ROUND_COLUMN].iloc[0])
-        matches.append((round_number, indices, utilities))
+        votes = group[VOTE_COLUMN].to_numpy(dtype=float)
+        recipients = np.flatnonzero(np.nan_to_num(votes) > 0.0)
+        triple = None
+        if len(recipients) == 3 and sorted(votes[recipients].tolist()) == [1.0, 2.0, 3.0]:
+            order = recipients[np.argsort(-votes[recipients], kind="stable")]
+            triple = tuple(int(index) for index in order)
+        matches.append(MatchGroup(round_number, indices, utilities, triple))
     return players, matches
 
 
@@ -126,7 +147,7 @@ def simulate_season(
     round_p3 = None
 
     if track_rounds:
-        rounds = sorted({round_number for round_number, _, _ in matches})
+        rounds = sorted({match.round_number for match in matches})
         round_position = {round_number: index for index, round_number in enumerate(rounds)}
         totals = np.zeros((n_players, n_sims), dtype=np.int32)
         cumulative_mean = np.zeros((n_players, len(rounds)))
@@ -142,12 +163,12 @@ def simulate_season(
         round_p2 = np.zeros((n_players, len(rounds)))
         round_p3 = np.zeros((n_players, len(rounds)))
 
-        ordered = sorted(matches, key=lambda entry: round_position[entry[0]])
+        ordered = sorted(matches, key=lambda match: round_position[match.round_number])
         pointer = 0
         for round_index, round_number in enumerate(rounds):
-            while pointer < len(ordered) and ordered[pointer][0] == round_number:
-                _, indices, utilities = ordered[pointer]
-                _allocate_match(rng, indices, utilities, effects, tau, totals, n_sims)
+            while pointer < len(ordered) and ordered[pointer].round_number == round_number:
+                match = ordered[pointer]
+                _allocate_match(rng, match.indices, match.utilities, effects, tau, totals, n_sims)
                 pointer += 1
             path_totals[:, round_index, :] = totals[:, path_index]
             cumulative_mean[:, round_index] = totals.mean(axis=1)
@@ -165,8 +186,8 @@ def simulate_season(
             previous[:] = totals
     else:
         totals = np.zeros((n_players, n_sims), dtype=np.int32)
-        for _, indices, utilities in matches:
-            _allocate_match(rng, indices, utilities, effects, tau, totals, n_sims)
+        for match in matches:
+            _allocate_match(rng, match.indices, match.utilities, effects, tau, totals, n_sims)
 
     summary = players.copy()
     summary["sim_mean"] = totals.mean(axis=1)
@@ -196,6 +217,36 @@ def simulate_season(
         round_p2=round_p2,
         round_p3=round_p3,
     )
+
+
+def integrated_match_log_loss(
+    frame: pd.DataFrame,
+    tau: float,
+    effect_scale: float = 0.0,
+    n_draws: int = 256,
+    seed: int = 42,
+) -> float:
+    """Mean NLL of observed triples, integrating over persistent player effects.
+
+    Each match probability is averaged over draws of the same persistent
+    player-season effects the season simulator uses, so match-level and
+    season-level calibration refer to the same predictive distribution.
+    """
+    players, matches = prepare_season(frame)
+    evaluable = [match for match in matches if match.triple is not None]
+    if not evaluable:
+        return float("nan")
+    rng = np.random.default_rng(seed)
+    if effect_scale > 0.0:
+        effects = rng.normal(0.0, effect_scale, size=(len(players), n_draws))
+    else:
+        effects = np.zeros((len(players), n_draws))
+    losses = []
+    for match in evaluable:
+        scores = match.utilities[:, None] + effects[match.indices]
+        log_prob = pl.match_log_likelihood_samples(scores, match.triple, tau)
+        losses.append(float(np.log(n_draws) - logsumexp(log_prob)))
+    return float(np.mean(losses))
 
 
 def _rounded(value, digits: int = 3):
@@ -284,13 +335,19 @@ def season_metrics(
     simulation: SeasonSimulation,
     contender_count: int = DEFAULT_CONTENDERS,
 ) -> dict:
-    """CRPS and interval coverage for season vote totals, overall and for contenders."""
+    """CRPS, interval coverage and award outcomes for season vote totals.
+
+    Contenders are the ``contender_count`` players with the highest simulated
+    mean, a definition that is available at forecast time; no hindsight from
+    the observed leaderboard enters the mask.
+    """
     totals = simulation.totals
     observed = simulation.players["observed_votes"].to_numpy(dtype=float)
     labelled = ~np.isnan(observed)
+    mean_votes = totals.mean(axis=1)
     contender_mask = labelled & np.isin(
         np.arange(len(observed)),
-        np.argsort(-totals.mean(axis=1))[:contender_count],
+        np.argsort(-mean_votes)[:contender_count],
     )
 
     def mean_crps(mask: np.ndarray) -> float:
@@ -315,6 +372,16 @@ def season_metrics(
             pairs = [evaluate.interval_coverage(totals[i], observed[i], level) for i in indices]
             result[f"coverage_{label}{suffix}"] = float(np.mean([pair[0] for pair in pairs]))
             result[f"width_{label}{suffix}"] = float(np.mean([pair[1] for pair in pairs]))
+
+    if labelled.any():
+        observed_max = float(np.nanmax(observed))
+        joint_winners = set(np.flatnonzero(labelled & (observed == observed_max)).tolist())
+        favorite = int(np.argmax(mean_votes))
+        winner = int(np.nanargmax(observed))
+        result["favorite_won"] = bool(favorite in joint_winners)
+        result["favorite_probability"] = float(simulation.players["p_first_or_joint"].iloc[favorite])
+        result["winner_probability"] = float(simulation.players["p_first_or_joint"].iloc[winner])
+        result["winner_mean_rank"] = int(1 + (mean_votes > mean_votes[winner]).sum())
     return result
 
 

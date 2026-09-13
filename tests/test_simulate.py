@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
+import pytest
 
-from brownlow import pl, simulate
+from brownlow import evaluate, pl, simulate
 
 
 def _season_frame() -> pd.DataFrame:
@@ -95,6 +96,31 @@ def test_calibrate_effect_scales_covers_the_grid():
     )
     assert set(grid["effect_scale"]) == {0.0, 0.5}
     assert (grid["season"] == 2024).all()
+
+
+def test_integrated_match_log_loss_matches_exact_allocation_loss_without_effects():
+    frame = _season_frame()
+    exact = evaluate.allocation_log_loss(evaluate.build_matches(frame), 1.0)
+    integrated = simulate.integrated_match_log_loss(frame, 1.0, effect_scale=0.0, n_draws=8)
+    assert integrated == pytest.approx(exact)
+
+
+def test_integrated_match_log_loss_increases_under_large_effects():
+    frame = _season_frame()
+    sharp = simulate.integrated_match_log_loss(frame, 0.2, effect_scale=0.0, n_draws=512)
+    wide = simulate.integrated_match_log_loss(frame, 0.2, effect_scale=2.0, n_draws=512)
+    assert wide > sharp
+
+
+def test_season_metrics_reports_award_outcomes():
+    simulation = simulate.simulate_season(
+        _season_frame(), tau=1.0, effect_scale=0.2, n_sims=500, seed=4
+    )
+    metrics = simulate.season_metrics(simulation, contender_count=2)
+    assert metrics["favorite_won"] is True
+    assert 0.0 <= metrics["favorite_probability"] <= 1.0
+    assert 0.0 <= metrics["winner_probability"] <= 1.0
+    assert metrics["winner_mean_rank"] == 1
 
 
 def test_tracked_rounds_are_cumulative_and_match_parity():

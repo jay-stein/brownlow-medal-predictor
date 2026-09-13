@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import evaluate, features, folds, ingest, model, paths, scores, simulate
+from . import evaluate, features, folds, ingest, model, paths, scores, simulate, validation
 
 
 def run_audit() -> None:
@@ -216,6 +216,112 @@ def run_calibrate_effects(args: argparse.Namespace) -> None:
         print(f"\nWrote effect-scale outputs to {output_dir}")
 
 
+def run_calibrate_joint(args: argparse.Namespace) -> None:
+    """Score the joint (tau, effect scale) grid and select production parameters."""
+    scores_by_season = _load_cached_scores(args.model)
+    requested = parse_seasons(args.seasons)
+    missing = [season for season in requested if season not in scores_by_season]
+    if missing:
+        raise SystemExit(
+            f"no cached {args.model} scores for {missing}: "
+            f"run `baseline --model {args.model} --seasons {missing[0]}` first"
+        )
+
+    tau_values = [float(part) for part in args.taus.split(",")]
+    scales = [float(part) for part in args.scales.split(",")]
+    grid = validation.joint_calibration_grid(
+        scores_by_season,
+        requested,
+        tau_values,
+        scales,
+        n_sims=args.n_sims,
+        n_draws=args.n_draws,
+        contender_count=args.contenders,
+        seed=args.seed,
+    )
+
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grid_path = output_dir / f"joint_grid_{args.model}.csv"
+    grid.to_csv(grid_path, index=False)
+
+    tune_seasons = parse_seasons(args.tune_seasons)
+    selection = validation.select_joint_params(grid, tune_seasons)
+    selection_path = output_dir / f"joint_selection_{args.model}.json"
+    selection_path.write_text(
+        json.dumps(
+            {
+                "tau": selection.tau,
+                "effect_scale": selection.effect_scale,
+                "model_key": args.model,
+                "selection_rule": (
+                    "equal-weight z(effect-integrated match NLL) + "
+                    "z(contender CRPS), tie-break lower NLL"
+                ),
+                "tune_seasons": tune_seasons,
+                "taus": tau_values,
+                "scales": scales,
+                "match_nll_optimum": {
+                    "tau": selection.best_match_nll_tau,
+                    "effect_scale": selection.best_match_nll_scale,
+                },
+                "crps_optimum": {
+                    "tau": selection.best_crps_tau,
+                    "effect_scale": selection.best_crps_scale,
+                },
+                "n_sims": args.n_sims,
+                "n_draws": args.n_draws,
+                "seed": args.seed,
+            },
+            indent=2,
+        )
+    )
+
+    with pd.option_context("display.width", 200):
+        print("=== selection summary over the evidence seasons ===")
+        print(selection.summary.round(4).to_string(index=False))
+    print(
+        f"\nselected tau={selection.tau} scale={selection.effect_scale}"
+        f" | match-NLL optimum tau={selection.best_match_nll_tau} "
+        f"scale={selection.best_match_nll_scale}"
+        f" | CRPS optimum tau={selection.best_crps_tau} scale={selection.best_crps_scale}"
+    )
+    print(f"\nWrote {grid_path} and {selection_path}")
+
+
+def run_rolling_backtest(args: argparse.Namespace) -> None:
+    """Fully rolling per-season validation from a saved joint grid."""
+    grid_path = paths.PROCESSED_DIR / "evaluation" / f"joint_grid_{args.model}.csv"
+    if not grid_path.exists():
+        raise SystemExit(
+            f"missing {grid_path}: run `calibrate-joint --model {args.model}` first"
+        )
+    grid = pd.read_csv(grid_path)
+    table = validation.rolling_validation(
+        grid,
+        report_seasons=parse_seasons(args.report_seasons),
+        min_evidence=args.min_evidence,
+    )
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"rolling_backtest_{args.model}.csv"
+    table.to_csv(output_path, index=False)
+
+    columns = [column for column in validation.ROLLING_COLUMNS if column in table.columns]
+    if not table.empty:
+        with pd.option_context("display.width", 240, "display.max_columns", 40):
+            print(table[columns].round(4).to_string(index=False))
+        summary = {
+            "seasons": len(table),
+            "coverage_90_contenders": table["coverage_90_contenders"].mean(),
+            "coverage_50_contenders": table["coverage_50_contenders"].mean(),
+            "mean_crps_contenders": table["mean_crps_contenders"].mean(),
+            "favorites_won": int(table["favorite_won"].sum()),
+        }
+        print(f"\nrolling summary: {summary}")
+    print(f"\nWrote {output_path}")
+
+
 def run_forecast(args: argparse.Namespace) -> None:
     """Simulate a season's count and report vote spreads and win probabilities."""
     season = args.season
@@ -249,10 +355,19 @@ def run_forecast(args: argparse.Namespace) -> None:
         if candidate < season
     ]
     tau, tau_matches = evaluate.fit_pooled_tau(prior_frames)
+    tau_source = f"leak-free MLE on {tau_matches} earlier matches"
 
+    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{model_key}.json"
     calibration_path = paths.PROCESSED_DIR / "evaluation" / f"calibrated_effect_scale_{model_key}.json"
     if args.effect_scale is not None:
         effect_scale = args.effect_scale
+    elif joint_path.exists():
+        joint = json.loads(joint_path.read_text())
+        tau = float(joint["tau"])
+        effect_scale = float(joint["effect_scale"])
+        tau_source = (
+            f"joint calibration on seasons {joint['tune_seasons'][0]}-{joint['tune_seasons'][-1]}"
+        )
     elif calibration_path.exists():
         effect_scale = float(json.loads(calibration_path.read_text())["effect_scale"])
     else:
@@ -334,7 +449,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         columns += ["mean_votes_min", "mean_votes_max", "p_first_or_joint_min", "p_first_or_joint_max"]
 
     print(
-        f"\n=== {season} Brownlow forecast ({model_key}, tau={tau:.3f} from {tau_matches} matches, "
+        f"\n=== {season} Brownlow forecast ({model_key}, tau={tau:.3f} from {tau_source}, "
         f"effect scale={effect_scale}, {args.n_sims} simulations) ===\n"
     )
     with pd.option_context("display.width", 240, "display.max_columns", 40):
@@ -351,6 +466,7 @@ def run_forecast(args: argparse.Namespace) -> None:
                 "model": model_key,
                 "tau": round(tau, 4),
                 "tauMatches": tau_matches,
+                "tauSource": tau_source,
                 "effectScale": effect_scale,
                 "nSims": args.n_sims,
                 "generated": pd.Timestamp.now().strftime("%Y-%m-%d"),
@@ -399,6 +515,28 @@ def main() -> None:
     effects.add_argument("--seed", type=int, default=42)
     effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.REGRESSION)
 
+    joint = subparsers.add_parser(
+        "calibrate-joint", help="joint (tau, effect scale) grid with integrated match NLL"
+    )
+    joint.add_argument("--seasons", default="2015-2025", help="seasons scored in the grid")
+    joint.add_argument(
+        "--tune-seasons", default="2015-2025", help="evidence seasons used for selection"
+    )
+    joint.add_argument("--taus", default="0.6,0.7,0.8,0.9,1.0,1.1")
+    joint.add_argument("--scales", default="0,0.1,0.2,0.3,0.4,0.5,0.6")
+    joint.add_argument("--n-sims", type=int, default=2000)
+    joint.add_argument("--n-draws", type=int, default=256)
+    joint.add_argument("--contenders", type=int, default=15)
+    joint.add_argument("--seed", type=int, default=42)
+    joint.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+
+    rolling = subparsers.add_parser(
+        "rolling-backtest", help="fully rolling per-season validation from a saved joint grid"
+    )
+    rolling.add_argument("--report-seasons", default="2018-2025")
+    rolling.add_argument("--min-evidence", type=int, default=3)
+    rolling.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+
     forecast = subparsers.add_parser(
         "forecast", help="simulate a season's count and report probabilities"
     )
@@ -426,6 +564,10 @@ def main() -> None:
         run_evaluate(args)
     elif args.command == "calibrate-effects":
         run_calibrate_effects(args)
+    elif args.command == "calibrate-joint":
+        run_calibrate_joint(args)
+    elif args.command == "rolling-backtest":
+        run_rolling_backtest(args)
     elif args.command == "forecast":
         run_forecast(args)
 

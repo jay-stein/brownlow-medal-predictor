@@ -3,7 +3,13 @@ import itertools
 import numpy as np
 import pytest
 
-from brownlow.pl import fit_tau, match_log_likelihood, pl_marginals, pl_weights
+from brownlow.pl import (
+    fit_tau,
+    match_log_likelihood,
+    match_log_likelihood_samples,
+    pl_marginals,
+    pl_weights,
+)
 
 
 def brute_force_marginals(s: np.ndarray, tau: float = 1.0) -> np.ndarray:
@@ -139,6 +145,18 @@ def test_marginals_are_finite_for_extreme_utilities():
 def test_match_log_likelihood_prefers_the_observed_order():
     utilities = np.array([10.0, 0.0, 0.0, 0.0])
     assert match_log_likelihood(utilities, (0, 1, 2)) > match_log_likelihood(utilities, (1, 2, 3))
+
+
+def test_match_log_likelihood_samples_matches_scalar_version():
+    rng = np.random.default_rng(31)
+    for _ in range(5):
+        n = int(rng.integers(4, 10))
+        utilities = rng.normal(size=n) * 1.5
+        triple = tuple(int(index) for index in rng.choice(n, size=3, replace=False))
+        scalar = match_log_likelihood(utilities, triple, tau=0.8)
+        sampled = match_log_likelihood_samples(utilities[:, None], triple, tau=0.8)
+        assert sampled.shape == (1,)
+        np.testing.assert_allclose(sampled[0], scalar, atol=1e-12)
 
 
 def test_fit_tau_recovers_known_temperature():

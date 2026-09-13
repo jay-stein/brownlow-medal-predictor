@@ -34,6 +34,26 @@ def match_log_likelihood(s: np.ndarray, triple: tuple[int, int, int], tau: float
     return log_prob
 
 
+def match_log_likelihood_samples(
+    scores: np.ndarray, triple: tuple[int, int, int], tau: float = 1.0
+) -> np.ndarray:
+    """Log probability of one observed triple for a matrix of utility draws.
+
+    ``scores`` has shape ``(n_players, n_samples)``; the return has length
+    ``n_samples``. Used to marginalise match probabilities over persistent
+    player-season effects.
+    """
+    scores = np.asarray(scores, dtype=float)
+    weights = np.exp((scores - scores.max(axis=0, keepdims=True)) / tau)
+    remaining = weights.copy()
+    log_prob = np.zeros(scores.shape[1])
+    for idx in triple:
+        total = remaining.sum(axis=0)
+        log_prob += np.log(remaining[idx] / total)
+        remaining[idx] = 0.0
+    return log_prob
+
+
 def negative_log_likelihood(
     scores: list[np.ndarray],
     triples: list[tuple[int, int, int]],
