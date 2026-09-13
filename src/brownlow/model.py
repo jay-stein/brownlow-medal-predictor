@@ -7,9 +7,10 @@ Two objectives are supported:
   within-match ordering directly, which is the quantity the 3-2-1 allocation
   depends on.
 
-Round selection uses match-grouped cross-validation and explicitly takes the
-mean best iteration across folds, rather than the length of a truncated CV
-history. Evaluation uses whole held-out seasons (see :mod:`brownlow.folds`).
+Round selection uses time-ordered season validation (falling back to rounds
+when only one training season exists), so early stopping mimics forecasting
+into a later era rather than a random match split. Evaluation uses whole
+held-out seasons (see :mod:`brownlow.folds`).
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from .folds import match_grouped_cv_indices
+from .folds import time_ordered_cv_indices
 
 REGRESSION = "regression"
 RANKING = "ranking"
@@ -93,26 +94,34 @@ def select_best_round(
     X: pd.DataFrame,
     y: pd.Series,
     match_ids: pd.Series,
+    season_ids: pd.Series,
+    round_ids: pd.Series,
     params: dict | None = None,
     num_boost_round: int = 3000,
     early_stopping_rounds: int = 100,
-    n_splits: int = 10,
+    n_splits: int = 3,
     seed: int = 42,
 ) -> dict:
-    """Match-grouped CV to choose the number of boosting rounds.
+    """Time-ordered CV to choose the number of boosting rounds.
 
-    Returns the mean best iteration across folds plus per-fold diagnostics.
+    Validation folds are the latest seasons of the training window (or the
+    latest rounds when only one season is available), each model trained only
+    on earlier rows. Returns the mean best iteration across folds plus per-fold
+    diagnostics.
     """
     fold_params = {**(params or DEFAULT_PARAMS)}
     ranking = is_ranking(fold_params)
     X = X.reset_index(drop=True)
     y = pd.Series(y).reset_index(drop=True)
     match_ids = pd.Series(match_ids).reset_index(drop=True)
+    season_ids = pd.Series(season_ids).reset_index(drop=True)
+    round_ids = pd.Series(round_ids).reset_index(drop=True)
 
     best_iterations: list[int] = []
     fold_scores: list[float] = []
+    fold_seasons: list[list[int]] = []
     for fold, (train_idx, valid_idx) in enumerate(
-        match_grouped_cv_indices(match_ids, n_splits=n_splits)
+        time_ordered_cv_indices(season_ids, round_ids, n_splits=n_splits)
     ):
         dtrain = build_dmatrix(
             X.iloc[train_idx], y.iloc[train_idx], match_ids.iloc[train_idx], ranking=ranking
@@ -130,11 +139,14 @@ def select_best_round(
         )
         best_iterations.append(int(booster.best_iteration) + 1)
         fold_scores.append(float(booster.best_score))
+        fold_seasons.append(sorted(int(value) for value in season_ids.iloc[valid_idx].unique()))
 
     return {
         "best_round": int(np.ceil(np.mean(best_iterations))),
         "fold_best_iterations": best_iterations,
         "fold_scores": fold_scores,
+        "fold_validation_seasons": fold_seasons,
+        "cv_scheme": "time_ordered_seasons",
         "objective": fold_params.get("objective"),
         "eval_metric": fold_params.get("eval_metric"),
     }

@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupKFold
 
 
 @dataclass(frozen=True)
@@ -54,12 +53,49 @@ def split_by_season(
     return train, evaluation
 
 
-def match_grouped_cv_indices(
-    match_ids: pd.Series | np.ndarray,
-    n_splits: int = 10,
+def season_cv_indices(
+    season_ids: pd.Series | np.ndarray,
+    n_splits: int = 3,
+    min_train_seasons: int = 1,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
-    """GroupKFold indices where every match stays in a single partition."""
-    groups = np.asarray(match_ids)
-    splitter = GroupKFold(n_splits=n_splits)
-    dummy = np.zeros((len(groups), 1))
-    return list(splitter.split(dummy, groups=groups))
+    """Forward-chaining folds over whole seasons.
+
+    The last ``n_splits`` seasons are each validated once, trained only on the
+    seasons before them. Every validation fold is therefore a genuine forecast
+    into a later era, unlike a random match-grouped split.
+    """
+    seasons = np.asarray(season_ids)
+    unique = np.sort(np.unique(seasons))
+    start = max(min_train_seasons, len(unique) - n_splits)
+    folds: list[tuple[np.ndarray, np.ndarray]] = []
+    for index in range(start, len(unique)):
+        valid_season = unique[index]
+        folds.append(
+            (np.flatnonzero(seasons < valid_season), np.flatnonzero(seasons == valid_season))
+        )
+    if not folds:
+        raise ValueError("not enough distinct seasons for a time-ordered split")
+    return folds
+
+
+def time_ordered_cv_indices(
+    season_ids: pd.Series | np.ndarray,
+    round_ids: pd.Series | np.ndarray,
+    n_splits: int = 3,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Time-ordered folds, falling back to rounds when only one season exists."""
+    seasons = np.asarray(season_ids)
+    if len(np.unique(seasons)) >= 2:
+        return season_cv_indices(seasons, n_splits=n_splits)
+    rounds = np.asarray(round_ids)
+    unique = np.sort(np.unique(rounds))
+    start = max(1, len(unique) - n_splits)
+    folds: list[tuple[np.ndarray, np.ndarray]] = []
+    for index in range(start, len(unique)):
+        valid_round = unique[index]
+        folds.append(
+            (np.flatnonzero(rounds < valid_round), np.flatnonzero(rounds == valid_round))
+        )
+    if not folds:
+        raise ValueError("not enough distinct rounds for a time-ordered split")
+    return folds

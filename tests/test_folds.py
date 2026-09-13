@@ -3,8 +3,9 @@ import pandas as pd
 from brownlow.folds import (
     DEV_FOLDS,
     FINAL_FOLD,
-    match_grouped_cv_indices,
+    season_cv_indices,
     split_by_season,
+    time_ordered_cv_indices,
 )
 
 
@@ -28,10 +29,25 @@ def test_split_by_season_keeps_whole_matches():
     assert len(train) + len(evaluation) == len(df)
 
 
-def test_match_grouped_cv_never_splits_a_match():
-    match_ids = pd.Series([f"m{index // 4}" for index in range(40)])
-    folds = match_grouped_cv_indices(match_ids, n_splits=5)
-    assert len(folds) == 5
+def test_season_cv_is_forward_chaining():
+    seasons = pd.Series([2020] * 4 + [2021] * 4 + [2022] * 4)
+    folds = season_cv_indices(seasons, n_splits=2)
+    assert [sorted(set(seasons.iloc[valid])) for _, valid in folds] == [[2021], [2022]]
     for train_idx, valid_idx in folds:
-        assert not set(match_ids.iloc[train_idx]) & set(match_ids.iloc[valid_idx])
+        assert seasons.iloc[train_idx].max() < seasons.iloc[valid_idx].min()
         assert len(valid_idx) > 0
+
+
+def test_season_cv_never_validates_on_unsupported_early_seasons():
+    seasons = pd.Series([2020] * 2 + [2021] * 2)
+    folds = season_cv_indices(seasons, n_splits=5)
+    assert [sorted(set(seasons.iloc[valid])) for _, valid in folds] == [[2021]]
+
+
+def test_time_ordered_cv_falls_back_to_rounds_for_one_season():
+    seasons = pd.Series([2020] * 6)
+    rounds = pd.Series([1, 1, 2, 2, 3, 3])
+    folds = time_ordered_cv_indices(seasons, rounds, n_splits=2)
+    assert [sorted(set(rounds.iloc[valid])) for _, valid in folds] == [[2], [3]]
+    for train_idx, valid_idx in folds:
+        assert rounds.iloc[train_idx].max() < rounds.iloc[valid_idx].min()
