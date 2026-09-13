@@ -1130,6 +1130,35 @@ h1 em {
   display: flex;
   align-items: center;
   gap: 9px;
+  cursor: pointer;
+}
+
+.team-card.expanded {
+  grid-column: 1 / -1;
+  border-color: rgba(212, 175, 55, 0.4);
+}
+
+.team-chevron {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--gold-light);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.team-detail {
+  margin-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 12px;
+}
+
+.team-detail .toggles {
+  margin-bottom: 6px;
 }
 
 .team-card h3 {

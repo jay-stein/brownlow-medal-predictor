@@ -55,6 +55,12 @@ class SeasonSimulation:
     match_slot_counts: list[np.ndarray] | None = None
     match_triple_counts: list[dict[int, int]] | None = None
     player_count: int | None = None
+    team_names: list[str] | None = None
+    team_cumulative_mean: np.ndarray | None = None
+    team_cumulative_quantiles: np.ndarray | None = None
+    team_increment_mean: np.ndarray | None = None
+    team_increment_quantiles: np.ndarray | None = None
+    team_path_totals: np.ndarray | None = None
 
 
 @dataclass
@@ -243,6 +249,12 @@ def simulate_season(
     round_p1 = None
     round_p2 = None
     round_p3 = None
+    team_names = None
+    team_cumulative_mean = None
+    team_cumulative_quantiles = None
+    team_increment_mean = None
+    team_increment_quantiles = None
+    team_path_totals = None
     match_groups = None
     match_slot_counts = None
     match_triple_counts = None
@@ -271,6 +283,17 @@ def simulate_season(
         round_p1 = np.zeros((n_players, len(rounds)))
         round_p2 = np.zeros((n_players, len(rounds)))
         round_p3 = np.zeros((n_players, len(rounds)))
+
+        team_names = sorted(players["TEAM_NAME"].dropna().unique().tolist())
+        team_player_indices = [
+            np.flatnonzero(players["TEAM_NAME"].to_numpy() == name) for name in team_names
+        ]
+        n_teams = len(team_names)
+        team_cumulative_mean = np.zeros((n_teams, len(rounds)))
+        team_cumulative_quantiles = np.zeros((n_teams, len(rounds), len(ROUND_QUANTILES)))
+        team_increment_mean = np.zeros((n_teams, len(rounds)))
+        team_increment_quantiles = np.zeros((n_teams, len(rounds), len(ROUND_QUANTILES)))
+        team_previous = np.zeros((n_teams, n_sims))
 
         ordered = sorted(matches, key=lambda match: round_position[match.round_number])
         pointer = 0
@@ -308,6 +331,22 @@ def simulate_season(
             round_p2[:, round_index] = (increment == 2).mean(axis=1)
             round_p3[:, round_index] = (increment == 3).mean(axis=1)
             previous[:] = totals
+
+            team_totals = np.stack([totals[idx].sum(axis=0) for idx in team_player_indices])
+            team_cumulative_mean[:, round_index] = team_totals.mean(axis=1)
+            team_cumulative_quantiles[:, round_index, :] = np.quantile(
+                team_totals, ROUND_QUANTILES, axis=1
+            ).T
+            team_increment = team_totals - team_previous
+            team_increment_mean[:, round_index] = team_increment.mean(axis=1)
+            team_increment_quantiles[:, round_index, :] = np.quantile(
+                team_increment, ROUND_QUANTILES, axis=1
+            ).T
+            team_previous[:] = team_totals
+
+        team_path_totals = np.stack(
+            [path_totals[idx].sum(axis=0) for idx in team_player_indices]
+        )
     else:
         totals = np.zeros((n_players, n_sims), dtype=np.int32)
         for index, match in enumerate(matches):
@@ -349,6 +388,12 @@ def simulate_season(
         match_slot_counts=match_slot_counts,
         match_triple_counts=match_triple_counts,
         player_count=player_count,
+        team_names=team_names,
+        team_cumulative_mean=team_cumulative_mean,
+        team_cumulative_quantiles=team_cumulative_quantiles,
+        team_increment_mean=team_increment_mean,
+        team_increment_quantiles=team_increment_quantiles,
+        team_path_totals=team_path_totals,
     )
 
 
@@ -457,6 +502,40 @@ def forecast_export(
         )
 
     n_sims = simulation.totals.shape[1]
+    team_rounds: dict[str, dict] = {}
+    if (
+        simulation.team_names is not None
+        and simulation.team_cumulative_mean is not None
+        and simulation.team_cumulative_quantiles is not None
+        and simulation.team_increment_mean is not None
+        and simulation.team_increment_quantiles is not None
+    ):
+        for index, name in enumerate(simulation.team_names):
+            cumulative = simulation.team_cumulative_quantiles[index]
+            increment = simulation.team_increment_quantiles[index]
+            paths: list[list[int]] = []
+            if simulation.team_path_totals is not None:
+                team_paths = simulation.team_path_totals[index]
+                paths = [
+                    [int(value) for value in team_paths[:, path]]
+                    for path in range(min(team_paths.shape[1], 40))
+                ]
+            team_rounds[str(name)] = {
+                "cumMean": [_rounded(value) for value in simulation.team_cumulative_mean[index]],
+                "cumQ05": [_rounded(value) for value in cumulative[:, 0]],
+                "cumQ25": [_rounded(value) for value in cumulative[:, 1]],
+                "cumMedian": [_rounded(value) for value in cumulative[:, 2]],
+                "cumQ75": [_rounded(value) for value in cumulative[:, 3]],
+                "cumQ95": [_rounded(value) for value in cumulative[:, 4]],
+                "incMean": [_rounded(value) for value in simulation.team_increment_mean[index]],
+                "incQ05": [_rounded(value) for value in increment[:, 0]],
+                "incQ25": [_rounded(value) for value in increment[:, 1]],
+                "incMedian": [_rounded(value) for value in increment[:, 2]],
+                "incQ75": [_rounded(value) for value in increment[:, 3]],
+                "incQ95": [_rounded(value) for value in increment[:, 4]],
+                "paths": paths,
+            }
+
     team_payload = []
     for team, group in simulation.players.groupby("TEAM_NAME"):
         positions = group.index.to_numpy()
@@ -477,6 +556,7 @@ def forecast_export(
                     }
                     for _, row in top_players.iterrows()
                 ],
+                "rounds": team_rounds.get(str(team)),
             }
         )
     team_payload.sort(key=lambda row: row["expected"], reverse=True)

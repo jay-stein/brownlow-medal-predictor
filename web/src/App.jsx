@@ -361,7 +361,7 @@ export default function App() {
         </section>
       )}
 
-      {view === "teams" && <TeamsView teams={data.teams ?? []} />}
+      {view === "teams" && <TeamsView teams={data.teams ?? []} rounds={data.rounds} />}
 
       {view === "matches" && <MatchesView matches={data.matches ?? []} rounds={data.rounds} />}
 

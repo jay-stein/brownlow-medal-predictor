@@ -25,3 +25,4 @@ combined variant is worse than either block alone, so promote the season aggrega
 - [x] **Expandable match tiles** showing the fuller official report excerpt, all vote candidates and alternative exact triples.
 - [x] **Matches by Team** page with club chips and the selected club's players grouped first and highlighted.
 - [x] **Past Winners** page: 2018–2025 rolling forecasts vs actual medallists, with hit/miss cards and summary stats.
+- [x] **Team Totals expansion**: clicking a club opens its cumulative team worm or per-round expected votes, both with 50%/90% bands from the simulations.
