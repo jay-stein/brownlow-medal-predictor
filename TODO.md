@@ -17,6 +17,9 @@ combined variant is worse than either block alone, so promote the season aggrega
 
 ## Web engagement polish
 
-- [x] **Team logos** in the leaderboard, race legend, teams view and match cards (Squiggle CDN, with a colour-monogram fallback).
+- [x] **Team logos** in the leaderboard, race legend, teams view and match cards (Squiggle CDN, with a colour-monogram fallback on a light disc so dark logos stay visible).
 - [x] **Legend/guide** for the match abbreviations (`28d` = disposals, `9g` = goals, `cv` = coaches' votes, `p3/p2/p1` = vote probabilities).
 - [x] **Light probability shading** on the match vote cells (darker = more likely) with a mini bar, kept subtle.
+- [x] **Nerdy Stuff page** with the full method, rolling performance, model comparison, shortcomings and references.
+- [x] **Top 10 race** promoted to its own page with a summary table.
+- [x] **Expandable match tiles** showing the fuller official report excerpt, all vote candidates and alternative exact triples.

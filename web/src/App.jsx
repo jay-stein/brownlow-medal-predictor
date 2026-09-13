@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import MatchesView from "./MatchesView.jsx";
+import NerdyStuff from "./NerdyStuff.jsx";
 import RoundVotes from "./RoundVotes.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import TeamsView from "./TeamsView.jsx";
@@ -90,22 +91,9 @@ export default function App() {
           Brownlow Medal <em>Forecast</em>
         </h1>
         <p className="subtitle">
-          {Number(meta.nSims ?? 10000).toLocaleString()} simulated counts · Plackett–Luce allocation
-          with calibrated uncertainty
+          {Number(meta.nSims ?? 10000).toLocaleString()} simulated counts · calibrated uncertainty ·
+          post-round-24
         </p>
-        <div className="chips">
-          <span>
-            Model:{" "}
-            {meta.model === "ranking_season"
-              ? "LambdaMART + coaches' votes + season form"
-              : meta.model === "ranking_coaches"
-                ? "LambdaMART + coaches' votes"
-                : meta.model ?? "ranking"}
-          </span>
-          <span>τ = {meta.tau ?? "—"}</span>
-          <span>Effect scale = {meta.effectScale ?? "—"}</span>
-          <span>Generated {meta.generated ?? "—"}</span>
-        </div>
       </header>
 
       <nav className="view-switcher">
@@ -115,6 +103,13 @@ export default function App() {
           onClick={() => setView("contenders")}
         >
           Contenders
+        </button>
+        <button
+          type="button"
+          className={view === "race" ? "active" : ""}
+          onClick={() => setView("race")}
+        >
+          Top 10 race
         </button>
         <button
           type="button"
@@ -129,6 +124,13 @@ export default function App() {
           onClick={() => setView("matches")}
         >
           Matches
+        </button>
+        <button
+          type="button"
+          className={view === "nerdy" ? "active" : ""}
+          onClick={() => setView("nerdy")}
+        >
+          Nerdy Stuff
         </button>
       </nav>
 
@@ -295,18 +297,51 @@ export default function App() {
       </main>
       )}
 
-      {view === "contenders" && (
+      {view === "race" && (
         <section className="panel race-panel">
           <div className="panel-head">
             <h2>Top 10 race</h2>
-            <span className="hint">cumulative expected votes · click a name to inspect</span>
+            <span className="hint">
+              cumulative expected votes round by round · click a name to highlight
+            </span>
           </div>
           <TopWorms
             players={players.slice(0, 10)}
             rounds={data.rounds}
             selectedId={player.id}
             onSelect={setSelectedId}
+            height={440}
           />
+          <table className="race-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Expected</th>
+                <th>90% range</th>
+                <th>P(first or joint)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {players.slice(0, 10).map((entry, index) => (
+                <tr
+                  key={entry.id}
+                  className={entry.id === player.id ? "active" : ""}
+                  onClick={() => setSelectedId(entry.id)}
+                >
+                  <td>{index + 1}</td>
+                  <td>
+                    <TeamLogo team={entry.team} size={16} /> {entry.name}
+                  </td>
+                  <td>{Number(entry.expectedVotes ?? 0).toFixed(1)}</td>
+                  <td>
+                    {entry.q05}–{entry.q95}
+                  </td>
+                  <td>{pct(entry.pFirstOrJoint)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
       )}
 
@@ -314,21 +349,14 @@ export default function App() {
 
       {view === "matches" && <MatchesView matches={data.matches ?? []} rounds={data.rounds} />}
 
+      {view === "nerdy" && <NerdyStuff meta={meta} />}
+
       <footer className="footnote">
         <p>
-          Method: match-grouped LambdaMART scores trained on 2012–2025 votes, using match statistics,
-          the AFL Coaches Association's per-match panel votes and leave-one-game-out season form as
-          features; Plackett–Luce allocation with temperature τ and persistent-effect scale σ
-          calibrated jointly on effect-integrated match likelihood and contender CRPS
-          ({meta.tauSource ?? "prior seasons"}); historical player effects are shrunken residuals
-          from prior seasons. Rolling 2021–2025 backtest: contender CRPS of 2.62, 90% interval
-          coverage of 92%, and the model favourite won 2 of the 5 counts.
-        </p>
-        <p>
-          Post-round-24 conditional forecast: 2026 match statistics and coaches' votes are observed,
-          only the hidden umpire votes are simulated. Suspended players keep their simulated votes
-          but are ineligible to win the medal, so their win probabilities are shown as zero (marked
-          "ineligible"). Vote totals, bands and probabilities are model estimates, not certainties.
+          Post-round-24 conditional forecast: 2026 match statistics, coaches' votes and season form
+          are observed; only the hidden umpire votes are simulated. Suspended players keep their
+          simulated votes but cannot win the medal. Method, performance, shortcomings and credits are
+          on the <button type="button" className="link-button" onClick={() => setView("nerdy")}>Nerdy Stuff</button> page.
         </p>
       </footer>
     </div>
