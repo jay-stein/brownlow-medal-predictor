@@ -655,6 +655,24 @@ def run_forecast(args: argparse.Namespace) -> None:
         )
         cached = result
     frame = cached.frame
+    season_rows = labelled[labelled["ROUND_YEAR"] == season]
+    match_meta = (
+        season_rows.groupby("PROVIDERID", as_index=False)
+        .agg(
+            HOME_TEAM_NAME=("HOME_TEAM_NAME", "first"),
+            AWAY_TEAM_NAME=("AWAY_TEAM_NAME", "first"),
+            HOMETEAMSCORE_MATCHSCORE_TOTALSCORE=(
+                "HOMETEAMSCORE_MATCHSCORE_TOTALSCORE",
+                "first",
+            ),
+            AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE=(
+                "AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE",
+                "first",
+            ),
+            VENUE_NAME=("VENUE_NAME", "first"),
+        )
+    )
+    frame = frame.merge(match_meta, on="PROVIDERID", how="left")
 
     prior_frames = [
         scores.load_scores(candidate, model_key).frame

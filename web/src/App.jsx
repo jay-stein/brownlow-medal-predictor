@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import MatchesView from "./MatchesView.jsx";
 import RoundVotes from "./RoundVotes.jsx";
+import TeamsView from "./TeamsView.jsx";
+import TopWorms from "./TopWorms.jsx";
 import WormChart from "./WormChart.jsx";
 import { teamColor } from "./teams.js";
 
@@ -15,6 +18,7 @@ export default function App() {
   const [mode, setMode] = useState("cumulative");
   const [showPaths, setShowPaths] = useState(true);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState("contenders");
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}forecast_2026.json`)
@@ -101,6 +105,31 @@ export default function App() {
         </div>
       </header>
 
+      <nav className="view-switcher">
+        <button
+          type="button"
+          className={view === "contenders" ? "active" : ""}
+          onClick={() => setView("contenders")}
+        >
+          Contenders
+        </button>
+        <button
+          type="button"
+          className={view === "teams" ? "active" : ""}
+          onClick={() => setView("teams")}
+        >
+          Teams
+        </button>
+        <button
+          type="button"
+          className={view === "matches" ? "active" : ""}
+          onClick={() => setView("matches")}
+        >
+          Matches
+        </button>
+      </nav>
+
+      {view === "contenders" && (
       <main className="layout">
         <section className="panel leaderboard-panel">
           <div className="panel-head">
@@ -261,6 +290,26 @@ export default function App() {
           </div>
         </section>
       </main>
+      )}
+
+      {view === "contenders" && (
+        <section className="panel race-panel">
+          <div className="panel-head">
+            <h2>Top 10 race</h2>
+            <span className="hint">cumulative expected votes · click a name to inspect</span>
+          </div>
+          <TopWorms
+            players={players.slice(0, 10)}
+            rounds={data.rounds}
+            selectedId={player.id}
+            onSelect={setSelectedId}
+          />
+        </section>
+      )}
+
+      {view === "teams" && <TeamsView teams={data.teams ?? []} />}
+
+      {view === "matches" && <MatchesView matches={data.matches ?? []} rounds={data.rounds} />}
 
       <footer className="footnote">
         <p>

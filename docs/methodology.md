@@ -111,8 +111,13 @@ Training protocol:
 | `ranking_nocba` (CBA features removed) | 3.08 | 0.89 | 1/5 | 0.150 |
 | `ranking_pl` (direct ordered-triple likelihood) | 3.09 | 0.85 | 2/5 | 0.216 |
 | `ranking` (all-history baseline) | 3.17 | 0.87 | 1/5 | 0.169 |
+| `ranking_season` (leave-one-game-out season aggregates) | **2.62** | 0.92 | 2/5 | **0.233** |
+| `ranking_context` (Elo, travel, close games) | 2.66 | 0.96 | 2/5 | 0.238 |
+| `ranking_form` (aggregates + context) | 2.67 | 0.91 | 1/5 | 0.173 |
 
 The coaches' votes are the one change with a clear signal; recency windows, recency weighting and the CBA ablation are all within noise of the baseline. Direct Plackett–Luce optimisation gives the best integrated match NLL (5.21 versus 5.24) but worse season CRPS and coverage, consistent with the review's caution that ranking quality and probability shape are different objectives. Combining the PL objective with coaches' votes is the natural next experiment.
+
+**Season-form and context features.** Leave-one-game-out season aggregates (per-game stat means, coach-vote totals/rate/rank, team win rate) improve rolling contender CRPS to 2.62 with the same favourite hit rate and a higher average winner probability (0.233 versus 0.217); the gain holds in four of the five rolling seasons. Chronological Elo, interstate travel and close-game flags are similar on CRPS (2.66) but over-cover 90% intervals (0.96). Combining both blocks is *worse* than either alone (2.67, one favourite hit), which suggests the two feature families substitute for each other rather than add. These variants are trained and evaluated but not yet promoted to production; the full pipeline depends on post-season information (the same boundary the current forecast already declares).
 
 ## 6. Plackett–Luce allocation and temperature
 
