@@ -14,6 +14,11 @@
   box-sizing: border-box;
 }
 
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 html,
 body,
 #root {
@@ -24,6 +29,7 @@ body {
   margin: 0;
   font-family: Inter, "Segoe UI", system-ui, sans-serif;
   color: var(--ink);
+  overflow-x: hidden;
   background:
     radial-gradient(1100px 480px at 50% -160px, rgba(212, 175, 55, 0.18), transparent 70%),
     radial-gradient(900px 600px at 85% 110%, rgba(38, 70, 140, 0.28), transparent 65%),
@@ -780,7 +786,7 @@ h1 em {
 
 .nerdy-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
   gap: 16px;
 }
 
@@ -930,7 +936,7 @@ h1 em {
 
 .winner-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   gap: 14px;
 }
 
@@ -1115,7 +1121,7 @@ h1 em {
 
 .team-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
   gap: 14px;
 }
 
@@ -1260,7 +1266,7 @@ h1 em {
 
 .match-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
   gap: 16px;
 }
 
@@ -1431,12 +1437,173 @@ h1 em {
   color: var(--muted);
 }
 
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 720px) {
-  .match-grid {
-    grid-template-columns: 1fr;
+  body {
+    background-attachment: scroll;
   }
 
-  .team-grid {
+  .app {
+    padding: 22px 12px 40px;
+  }
+
+  .hero {
+    margin-bottom: 20px;
+  }
+
+  .medal {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 10px;
+  }
+
+  .medal span {
+    font-size: 20px;
+  }
+
+  .hero h1 {
+    font-size: 1.9rem;
+  }
+
+  .subtitle {
+    font-size: 0.82rem;
+    padding: 0 6px;
+  }
+
+  .view-switcher {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+    margin-bottom: 18px;
+    scrollbar-width: none;
+  }
+
+  .view-switcher::-webkit-scrollbar {
+    display: none;
+  }
+
+  .view-switcher button {
+    flex: 0 0 auto;
+    padding: 7px 13px;
+    font-size: 0.68rem;
+  }
+
+  .panel,
+  .chart-panel,
+  .teams-panel,
+  .matches-panel,
+  .nerdy-panel,
+  .past-panel,
+  .race-panel {
+    padding: 14px;
+  }
+
+  .layout {
+    gap: 14px;
+  }
+
+  .leaderboard li {
+    grid-template-columns: 20px 26px minmax(0, 1fr) 34px 60px;
+    gap: 5px;
+    padding: 7px 4px;
+  }
+
+  .who .name {
+    font-size: 0.8rem;
+  }
+
+  .prob-value {
+    font-size: 0.7rem;
+  }
+
+  .match-grid,
+  .team-grid,
+  .nerdy-grid,
+  .winner-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .match-score {
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .match-score b {
+    font-size: 0.95rem;
+  }
+
+  .vote-head,
+  .vote-row {
+    grid-template-columns: 1.4fr 0.5fr 0.5fr 0.5fr 1fr;
+    font-size: 0.66rem;
+    gap: 4px;
+  }
+
+  .vote-stats {
+    white-space: normal;
+    text-align: left;
+  }
+
+  .heatmap-cell {
+    min-height: 32px;
+  }
+
+  .summary-strip div {
+    flex-basis: 100%;
+  }
+
+  .round-switcher button {
+    min-width: 32px;
+    padding: 4px 7px;
+    font-size: 0.68rem;
+  }
+
+  .team-chips button {
+    padding: 4px 8px;
+    font-size: 0.68rem;
+  }
+
+  .chart-tooltip {
+    max-height: 55vh;
+    overflow-y: auto;
+  }
+
+  .table-scroll .nerdy-table {
+    min-width: 520px;
+  }
+
+  .table-scroll .race-table {
+    min-width: 420px;
+  }
+
+  .panel-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .panel-head input {
+    width: 100%;
+  }
+
+  .toggles,
+  .hot-rounds,
+  .round-detail {
+    flex-wrap: wrap;
+  }
+
+  .stat-grid {
+    gap: 8px;
+  }
+
+  .footnote {
+    font-size: 0.72rem;
   }
 }

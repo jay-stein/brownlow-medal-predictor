@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import TeamLogo from "./TeamLogo.jsx";
 import WormChart from "./WormChart.jsx";
+import useNarrow from "./useNarrow.js";
 
 const TEAM_ROWS = [
   { key: "fiveSix", label: "5-6 votes", color: "246, 226, 122", bracket: (probs) => (probs?.[5] ?? 0) + (probs?.[6] ?? 0) },
@@ -137,6 +138,7 @@ function TeamRoundVotes({ team, rounds, matches, teamName }) {
 export default function TeamsView({ teams, rounds, matches }) {
   const [expanded, setExpanded] = useState(null);
   const [mode, setMode] = useState("cumulative");
+  const narrow = useNarrow();
   if (!teams?.length) return null;
   const max = Math.max(...teams.map((team) => team.q95 ?? team.expected ?? 0), 1);
 
@@ -247,6 +249,7 @@ export default function TeamsView({ teams, rounds, matches }) {
                       data={chartData}
                       player={{ rounds: { paths: team.rounds?.paths ?? [] } }}
                       showPaths={false}
+                      height={narrow ? 300 : 520}
                     />
                   ) : (
                     <TeamRoundVotes

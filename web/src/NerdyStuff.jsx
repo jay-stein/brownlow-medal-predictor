@@ -111,17 +111,18 @@ export default function NerdyStuff({ meta }) {
             earlier labels, calibration and effects are selected on earlier out-of-sample seasons,
             then the season is forecast once. Award probabilities respect suspensions.
           </p>
-          <table className="nerdy-table">
-            <thead>
-              <tr>
-                <th>Season</th>
-                <th>Contender CRPS</th>
-                <th>90% cov</th>
-                <th>50% cov</th>
-                <th>Fav won</th>
-                <th>Winner P</th>
-              </tr>
-            </thead>
+          <div className="table-scroll">
+            <table className="nerdy-table">
+              <thead>
+                <tr>
+                  <th>Season</th>
+                  <th>Contender CRPS</th>
+                  <th>90% cov</th>
+                  <th>50% cov</th>
+                  <th>Fav won</th>
+                  <th>Winner P</th>
+                </tr>
+              </thead>
             <tbody>
               {ROLLING.map((row) => (
                 <tr key={row[0]}>
@@ -139,7 +140,8 @@ export default function NerdyStuff({ meta }) {
                 <td>23.3%</td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
           <p className="nerdy-note">
             <b>CRPS</b> (continuous ranked probability score) scores the whole predicted distribution
             against the observed total; it rewards being close <i>and</i> honest about spread, so a
@@ -149,16 +151,17 @@ export default function NerdyStuff({ meta }) {
 
         <article className="nerdy-card">
           <h3>What was compared</h3>
-          <table className="nerdy-table">
-            <thead>
-              <tr>
-                <th>Approach</th>
-                <th>CRPS</th>
-                <th>90% cov</th>
-                <th>Fav won</th>
-                <th>Winner P</th>
-              </tr>
-            </thead>
+          <div className="table-scroll">
+            <table className="nerdy-table">
+              <thead>
+                <tr>
+                  <th>Approach</th>
+                  <th>CRPS</th>
+                  <th>90% cov</th>
+                  <th>Fav won</th>
+                  <th>Winner P</th>
+                </tr>
+              </thead>
             <tbody>
               {VARIANTS.map((row) => (
                 <tr key={row[0]}>
@@ -168,7 +171,8 @@ export default function NerdyStuff({ meta }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
           <p className="nerdy-note">
             The original overconfident model (100 feature-bagged XGBoost models with independent
             Normal draws) is reconstructed faithfully as the baseline. It covered a fifth of its 90%

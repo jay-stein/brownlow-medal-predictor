@@ -39,11 +39,11 @@ function WormTooltip({ active, payload, label }) {
   );
 }
 
-export default function WormChart({ data, player, showPaths }) {
+export default function WormChart({ data, player, showPaths, height = 520 }) {
   const pathKeys = player?.rounds?.paths?.map((_, index) => `path_${index}`) ?? [];
 
   return (
-    <ResponsiveContainer width="100%" height={520}>
+    <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 16, right: 24, bottom: 8, left: 0 }}>
         <defs>
           <linearGradient id="outerBand" x1="0" y1="0" x2="0" y2="1">
