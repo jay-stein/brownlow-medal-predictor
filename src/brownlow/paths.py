@@ -8,9 +8,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 DATA_DIR = ROOT / "data"
 PROCESSED_DIR = DATA_DIR / "processed"
-MODELS_DIR = ROOT / "models"
-RESULT_DIR = ROOT / "result"
-BACKCAST_DIR = ROOT / "backcast"
 
 PLAYER_STATS_CSV = DATA_DIR / "player_stats_2012_2026_fitzroy.csv"
 TEAM_STATS_CSV = DATA_DIR / "team_stats_2012_2026_fitzroy.csv"

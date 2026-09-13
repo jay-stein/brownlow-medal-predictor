@@ -1,7 +1,7 @@
-"""Feature engineering ported from ``notebooks/xgboost_predict_brownlow_v2.ipynb``.
+"""Feature engineering for the Brownlow pipeline.
 
-The feature list is intentionally identical to the notebook's 120-feature set so
-the frozen baseline scores remain comparable.
+The 124-feature set evolved from the original notebook model; the full
+definition lives in :data:`FEATURE_LIST`.
 """
 
 from __future__ import annotations

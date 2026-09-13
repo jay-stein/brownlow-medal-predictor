@@ -36,4 +36,3 @@ addopts = "-q"
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-extend-exclude = ["notebooks", "archive"]
