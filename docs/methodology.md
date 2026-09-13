@@ -6,8 +6,8 @@ How the Brownlow prediction works, from the voting rule through to the probabili
 
 The voting rule shapes the entire problem:
 
-- In every home-and-away match the umpires award **3, 2 and 1 votes** to three different players. That is a fixed pool of **6 votes per match** shared by everyone on the ground (~46 players).
-- A player plays at most one match per round, so a player's ceiling is **3 votes per round**; a bye or missed game is 0.
+- **Votes are awarded to 3 players only per match — summing to 6 total votes (3 + 2 + 1).** Every home-and-away match awards one set of 3-2-1 to three different players, and since a player plays at most one match per round, it reads naturally as "three players and six votes per round". The pool is shared by everyone on the ground (~46 players).
+- A player's ceiling is therefore **3 votes per round**; a bye or missed game is 0.
 - League-wide, the season pool is exactly `6 × matches` (1,242 votes across 207 matches in 2026). The model cannot create or destroy votes — it only redistributes them.
 
 ### You are competing with your teammates
