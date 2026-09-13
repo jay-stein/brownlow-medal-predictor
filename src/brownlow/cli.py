@@ -50,6 +50,7 @@ def run_audit() -> None:
         )
     else:
         print("AFLCA votes not found: run `fetch-coaches` to populate COACH_VOTES\n")
+    table = features.add_season_aggregates(table)
     crosswalk = ingest.build_crosswalk(player_stats, votes)
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
 
@@ -654,6 +655,24 @@ def run_forecast(args: argparse.Namespace) -> None:
         )
         cached = result
     frame = cached.frame
+    season_rows = labelled[labelled["ROUND_YEAR"] == season]
+    match_meta = (
+        season_rows.groupby("PROVIDERID", as_index=False)
+        .agg(
+            HOME_TEAM_NAME=("HOME_TEAM_NAME", "first"),
+            AWAY_TEAM_NAME=("AWAY_TEAM_NAME", "first"),
+            HOMETEAMSCORE_MATCHSCORE_TOTALSCORE=(
+                "HOMETEAMSCORE_MATCHSCORE_TOTALSCORE",
+                "first",
+            ),
+            AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE=(
+                "AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE",
+                "first",
+            ),
+            VENUE_NAME=("VENUE_NAME", "first"),
+        )
+    )
+    frame = frame.merge(match_meta, on="PROVIDERID", how="left")
 
     prior_frames = [
         scores.load_scores(candidate, model_key).frame
@@ -718,6 +737,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         track_rounds=args.web_json is not None,
         path_count=args.web_paths,
         ineligible=ineligible,
+        track_matches=args.web_json is not None,
     )
     players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
 
@@ -799,10 +819,23 @@ def run_forecast(args: argparse.Namespace) -> None:
     print(f"\nWrote {output_dir / f'forecast_{season}_{model_key}.csv'}")
 
     if args.web_json is not None:
+        reports_path = paths.DATA_DIR / f"match_reports_{season}.json"
+        reports = json.loads(reports_path.read_text()) if reports_path.exists() else None
+        stats_columns = ["DISPOSALS", "GOALS", "COACH_VOTES", "RATINGPOINTS"]
+        season_stats = labelled[labelled["ROUND_YEAR"] == season]
+        match_stats = (
+            season_stats.set_index(["PROVIDERID", "PLAYER_PLAYER_PLAYER_PLAYERID"])[
+                stats_columns
+            ].to_dict("index")
+            if not season_stats.empty
+            else {}
+        )
         payload = simulate.forecast_export(
             simulation,
             players,
             top=args.web_players,
+            reports=reports,
+            match_stats=match_stats,
             metadata={
                 "season": season,
                 "model": model_key,

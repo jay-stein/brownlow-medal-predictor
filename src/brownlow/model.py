@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from . import pl
+from . import features, pl
 from .folds import time_ordered_cv_indices
 
 REGRESSION = "regression"
@@ -32,6 +32,9 @@ RANKING_WEIGHTED = "ranking_weighted"
 RANKING_NOCBA = "ranking_nocba"
 RANKING_PL = "ranking_pl"
 RANKING_COACHES = "ranking_coaches"
+RANKING_FORM = "ranking_form"
+RANKING_SEASON = "ranking_season"
+RANKING_CONTEXT = "ranking_context"
 
 REGRESSION_PARAMS: dict = {
     "objective": "reg:pseudohubererror",
@@ -74,6 +77,9 @@ MODEL_PARAMS: dict[str, dict] = {
     RANKING_NOCBA: RANKING_PARAMS,
     RANKING_PL: PL_PARAMS,
     RANKING_COACHES: RANKING_PARAMS,
+    RANKING_FORM: RANKING_PARAMS,
+    RANKING_SEASON: RANKING_PARAMS,
+    RANKING_CONTEXT: RANKING_PARAMS,
 }
 
 CBA_FEATURES = [
@@ -89,6 +95,18 @@ MODEL_OPTIONS: dict[str, dict] = {
     RANKING_NOCBA: {"base": RANKING, "drop_features": CBA_FEATURES},
     RANKING_PL: {"objective_kind": "pl"},
     RANKING_COACHES: {"base": RANKING, "extra_features": COACH_FEATURES},
+    RANKING_FORM: {
+        "base": RANKING,
+        "extra_features": COACH_FEATURES + features.FORM_FEATURES,
+    },
+    RANKING_SEASON: {
+        "base": RANKING,
+        "extra_features": COACH_FEATURES + features.SEASON_AGGREGATE_FEATURES,
+    },
+    RANKING_CONTEXT: {
+        "base": RANKING,
+        "extra_features": COACH_FEATURES + features.CONTEXT_FEATURES,
+    },
 }
 
 

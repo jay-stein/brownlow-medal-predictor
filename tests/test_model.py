@@ -96,6 +96,9 @@ def test_model_options_registry():
     assert model.model_options(model.RANKING_WEIGHTED)["recency_half_life"] == 4.0
     assert model.model_options(model.RANKING_NOCBA)["drop_features"] == model.CBA_FEATURES
     assert model.model_options(model.RANKING_COACHES)["extra_features"] == model.COACH_FEATURES
+    form_features = model.model_options(model.RANKING_FORM)["extra_features"]
+    assert "SEASON_COACH_VOTES_TOTAL" in form_features
+    assert "OPPONENT_ELO" in form_features
     assert model.is_pl(model.RANKING_PL)
     assert not model.is_pl(model.RANKING)
 
