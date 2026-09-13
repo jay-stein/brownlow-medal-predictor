@@ -55,15 +55,16 @@ export default function TeamLogo({ team, size = 20 }) {
   }
 
   return (
-    <img
-      className="team-logo"
-      src={src}
-      alt={team}
-      title={team}
-      width={size}
-      height={size}
-      loading="lazy"
-      onError={() => setFailed(true)}
-    />
+    <span className="logo-chip" title={team} style={{ width: size + 6, height: size + 6 }}>
+      <img
+        className="team-logo"
+        src={src}
+        alt={team}
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </span>
   );
 }

@@ -54,9 +54,11 @@ function mentionsTopPick(match) {
 }
 
 function MatchCard({ match }) {
+  const [expanded, setExpanded] = useState(false);
   const homeWon = match.homeScore > match.awayScore;
   const top = match.votes?.[0];
-  const triple = match.triples?.[0];
+  const votes = match.votes ?? [];
+  const triples = match.triples ?? [];
   return (
     <article className="match-card">
       <header>
@@ -82,7 +84,7 @@ function MatchCard({ match }) {
       {summarise(match) ? <p className="match-summary">{summarise(match)}</p> : null}
       {match.report ? (
         <div className="match-report">
-          <p className="report-text">{match.report.text}</p>
+          <p className={expanded ? "report-text" : "report-text clamped"}>{match.report.text}</p>
           <p className="report-credit">
             <a href={match.report.url} target="_blank" rel="noreferrer">
               {match.report.headline || "Match report"}
@@ -102,7 +104,7 @@ function MatchCard({ match }) {
           <span title="Probability of receiving 1 vote">1</span>
           <span>Game</span>
         </div>
-        {(match.votes ?? []).slice(0, 4).map((vote) => (
+        {(expanded ? votes : votes.slice(0, 4)).map((vote) => (
           <div
             className={vote.id === top?.id ? "vote-row top" : "vote-row"}
             key={vote.id}
@@ -122,11 +124,19 @@ function MatchCard({ match }) {
           </div>
         ))}
       </div>
-      {triple ? (
-        <p className="match-triple">
-          Likeliest exact 3-2-1: {triple.players.join(" / ")} ({pct(triple.p, 1)})
-        </p>
+      {triples.length ? (
+        <div className="match-triples">
+          {(expanded ? triples : triples.slice(0, 1)).map((option, index) => (
+            <p className="match-triple" key={index}>
+              {index === 0 ? "Likeliest exact 3-2-1" : "Alternative"}:{" "}
+              {option.players.join(" / ")} ({pct(option.p, 1)})
+            </p>
+          ))}
+        </div>
       ) : null}
+      <button type="button" className="tile-toggle" onClick={() => setExpanded(!expanded)}>
+        {expanded ? "Show less" : "More about this game"}
+      </button>
     </article>
   );
 }

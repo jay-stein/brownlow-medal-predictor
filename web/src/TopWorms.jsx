@@ -33,7 +33,7 @@ function RaceTooltip({ active, payload, label, players }) {
   );
 }
 
-export default function TopWorms({ players, rounds, selectedId, onSelect }) {
+export default function TopWorms({ players, rounds, selectedId, onSelect, height = 320 }) {
   if (!players.length || !rounds?.length) return null;
   const data = rounds.map((round, index) => {
     const row = { round: round.label };
@@ -45,7 +45,7 @@ export default function TopWorms({ players, rounds, selectedId, onSelect }) {
 
   return (
     <div className="race-wrap">
-      <ResponsiveContainer width="100%" height={320}>
+      <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: -12 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
           <XAxis dataKey="round" tick={{ fill: "#9fb0c3", fontSize: 11 }} interval="preserveStartEnd" />

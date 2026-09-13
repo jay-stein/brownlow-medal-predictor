@@ -22,7 +22,7 @@ INDEX_URL = "https://aflapi.afl.com.au/afl/v2/matches"
 MATCH_URL = "https://www.afl.com.au/afl/matches/{match_id}"
 NEWS_URL = "https://www.afl.com.au/news/{article_id}"
 SOURCE = "AFL.com.au"
-MAX_SUMMARY_CHARS = 480
+MAX_SUMMARY_CHARS = 1500
 PAGE_SIZE = 100
 
 USER_AGENT = (
@@ -75,23 +75,38 @@ def match_page_article_id(match_html: str) -> str | None:
 
 
 def article_summary(article_html: str) -> tuple[str, str]:
-    """Headline and lead paragraph of a report article."""
+    """Headline and leading paragraphs of a report article.
+
+    The excerpt runs to ``MAX_SUMMARY_CHARS`` at a paragraph boundary so the
+    web view can show a short version collapsed and more of the story when a
+    match tile is expanded.
+    """
     heading = _HEADING.search(article_html)
     headline = " ".join(html_unescape(_TAGS.sub(" ", heading.group(1))).split()) if heading else ""
     start = article_html.find('class="article__body"')
     if start < 0:
         start = article_html.find('class="article-body"')
-    region = article_html[start : start + 20000] if start >= 0 else article_html[:200000]
+    region = article_html[start : start + 30000] if start >= 0 else article_html[:200000]
+    paragraphs: list[str] = []
+    total = 0
     for chunk in re.findall(r"<p[^>]*>(.*?)</p>", region, re.DOTALL):
         text = " ".join(html_unescape(_TAGS.sub(" ", chunk)).split())
         if len(text) < 60 or any(marker in text for marker in ("function(", "var ", "-->")):
             continue
-        if len(text) > MAX_SUMMARY_CHARS:
-            cut = text[:MAX_SUMMARY_CHARS]
-            boundary = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
-            text = cut[: boundary + 1] if boundary > 120 else cut.rstrip() + "..."
-        return headline, text
-    return headline, ""
+        if paragraphs and total + len(text) > MAX_SUMMARY_CHARS:
+            break
+        paragraphs.append(text)
+        total += len(text)
+        if total >= MAX_SUMMARY_CHARS:
+            break
+    if not paragraphs:
+        return headline, ""
+    text = "\n\n".join(paragraphs)
+    if len(text) > MAX_SUMMARY_CHARS:
+        cut = text[:MAX_SUMMARY_CHARS]
+        boundary = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+        text = cut[: boundary + 1] if boundary > 120 else cut.rstrip() + "..."
+    return headline, text
 
 
 def fetch_reports(

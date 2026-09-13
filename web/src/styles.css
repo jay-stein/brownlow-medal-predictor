@@ -182,7 +182,7 @@ h1 em {
 
 .leaderboard li {
   display: grid;
-  grid-template-columns: 26px 24px minmax(0, 1fr) 48px 92px;
+  grid-template-columns: 26px 30px minmax(0, 1fr) 48px 92px;
   gap: 8px;
   align-items: center;
   padding: 9px 8px;
@@ -677,6 +677,204 @@ h1 em {
   display: inline-block;
   object-fit: contain;
   vertical-align: middle;
+}
+
+.logo-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  flex: 0 0 auto;
+}
+
+.logo-chip img {
+  display: block;
+}
+
+.link-button {
+  border: 0;
+  background: none;
+  color: var(--gold-light);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.race-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 0.78rem;
+}
+
+.race-table th {
+  text-align: left;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.race-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #cfd8ea;
+}
+
+.race-table tr {
+  cursor: pointer;
+}
+
+.race-table tr:hover {
+  background: rgba(212, 175, 55, 0.06);
+}
+
+.race-table tr.active {
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--ink);
+}
+
+.race-table td:first-child {
+  width: 28px;
+  color: var(--muted);
+}
+
+.report-text {
+  white-space: pre-line;
+}
+
+.report-text.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tile-toggle {
+  margin-top: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--gold-light);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.tile-toggle:hover {
+  border-color: var(--gold);
+}
+
+.match-triples .match-triple + .match-triple {
+  margin-top: 2px;
+}
+
+.nerdy-panel {
+  padding: 22px;
+}
+
+.nerdy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.nerdy-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 16px 18px;
+  text-align: left;
+}
+
+.nerdy-card h3 {
+  margin: 0 0 10px;
+  font-size: 1.02rem;
+  color: var(--gold-pale);
+}
+
+.nerdy-card ol,
+.nerdy-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #cfd8ea;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.nerdy-card li + li {
+  margin-top: 5px;
+}
+
+.nerdy-note {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.6;
+}
+
+.nerdy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+  margin: 8px 0;
+}
+
+.nerdy-table th {
+  text-align: left;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nerdy-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #cfd8ea;
+}
+
+.nerdy-total td {
+  color: var(--gold-pale);
+  font-weight: 600;
+}
+
+.nerdy-settings {
+  list-style: none;
+  padding-left: 0;
+}
+
+.nerdy-settings li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.07);
+  padding: 5px 0;
+  font-size: 0.78rem;
+}
+
+.nerdy-settings span {
+  color: var(--muted);
+}
+
+.nerdy-settings b {
+  color: var(--ink);
+  text-align: right;
+}
+
+.nerdy-references a {
+  color: var(--gold-light);
+  text-decoration: none;
+}
+
+.nerdy-references a:hover {
+  text-decoration: underline;
 }
 
 .monogram {
