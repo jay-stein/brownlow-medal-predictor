@@ -26,6 +26,54 @@ def brute_force_marginals(s: np.ndarray, tau: float = 1.0) -> np.ndarray:
     return marginal
 
 
+def explicit_sequential_marginals(weights: np.ndarray) -> np.ndarray:
+    """P(1/2/3) written as explicit sums over the first two placements.
+
+    Sequential Plackett-Luce denominators depend on the preceding picks, so
+    the symmetric-polynomial formulas used by other weighted-subset models do
+    not apply; this is the direct two-placement expansion.
+    """
+    n = len(weights)
+    total = weights.sum()
+    p1 = np.zeros(n)
+    p2 = np.zeros(n)
+    p3 = np.zeros(n)
+    for i in range(n):
+        p3[i] = weights[i] / total
+        for a in range(n):
+            if a == i:
+                continue
+            first = weights[a] / total
+            p2[i] += first * weights[i] / (total - weights[a])
+            for b in range(n):
+                if b == a or b == i:
+                    continue
+                p1[i] += (
+                    first
+                    * (weights[b] / (total - weights[a]))
+                    * (weights[i] / (total - weights[a] - weights[b]))
+                )
+    return np.column_stack([1.0 - p1 - p2 - p3, p1, p2, p3])
+
+
+def monte_carlo_marginals(
+    s: np.ndarray, tau: float, n_draws: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Exact Plackett-Luce draws via the Gumbel-max trick.
+
+    Adding i.i.d. Gumbel noise to the log-weights and sorting gives the same
+    distribution as sequential weighted sampling without replacement.
+    """
+    weights = pl_weights(s, tau)
+    perturbed = np.log(weights)[:, None] + rng.gumbel(size=(len(weights), n_draws))
+    order = np.argsort(-perturbed, axis=0)[:3]
+    counts = np.zeros((len(weights), 4))
+    for slot, rank in zip((3, 2, 1), range(3)):
+        np.add.at(counts, (order[rank], slot), 1)
+    counts[:, 0] = n_draws - counts[:, 1:].sum(axis=1)
+    return counts / n_draws
+
+
 def test_marginals_match_brute_force():
     rng = np.random.default_rng(7)
     utilities = rng.normal(size=6) * 1.3
@@ -36,6 +84,33 @@ def test_marginals_match_brute_force():
     )
 
 
+def test_marginals_match_explicit_sequential_formulas():
+    rng = np.random.default_rng(23)
+    for trial in range(20):
+        n = int(rng.integers(3, 9))
+        utilities = rng.normal(size=n) * rng.uniform(0.5, 4.0)
+        tau = float(rng.uniform(0.3, 3.0))
+        weights = pl_weights(utilities, tau)
+        np.testing.assert_allclose(
+            pl_marginals(utilities, tau),
+            explicit_sequential_marginals(weights),
+            atol=1e-10,
+            err_msg=f"trial {trial}: n={n}, tau={tau:.3f}",
+        )
+
+
+def test_marginals_match_monte_carlo_simulation():
+    rng = np.random.default_rng(19)
+    utilities = rng.normal(size=12) * 1.5
+    tau = 0.7
+    n_draws = 50_000
+    exact = pl_marginals(utilities, tau)
+    sampled = monte_carlo_marginals(utilities, tau, n_draws, rng)
+    tolerance = 4.0 * np.sqrt(exact * (1.0 - exact) / n_draws) + 0.002
+    assert np.abs(sampled - exact).max() < tolerance.max()
+    np.testing.assert_allclose(sampled.sum(axis=1), 1.0, atol=1e-12)
+
+
 def test_marginals_are_distributions_and_award_six_votes():
     rng = np.random.default_rng(11)
     utilities = rng.normal(size=20) * 2.0
@@ -43,6 +118,22 @@ def test_marginals_are_distributions_and_award_six_votes():
     np.testing.assert_allclose(marginal.sum(axis=1), 1.0, atol=1e-12)
     expected_votes = marginal @ np.array([0.0, 1.0, 2.0, 3.0])
     assert expected_votes.sum() == pytest.approx(6.0, abs=1e-9)
+
+
+def test_each_vote_slot_probability_sums_to_one():
+    rng = np.random.default_rng(29)
+    for n, tau in ((3, 0.4), (17, 0.9), (44, 1.0), (44, 0.3)):
+        utilities = rng.normal(size=n) * 2.0
+        marginal = pl_marginals(utilities, tau)
+        np.testing.assert_allclose(marginal[:, 1:].sum(axis=0), np.ones(3), atol=1e-10)
+
+
+def test_marginals_are_finite_for_extreme_utilities():
+    utilities = np.array([80.0, 40.0, 0.0, -40.0, -80.0])
+    marginal = pl_marginals(utilities, tau=0.2)
+    assert np.isfinite(marginal).all()
+    assert marginal.min() >= 0.0
+    np.testing.assert_allclose(marginal.sum(axis=1), 1.0, atol=1e-12)
 
 
 def test_match_log_likelihood_prefers_the_observed_order():

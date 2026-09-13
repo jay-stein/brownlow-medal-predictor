@@ -96,11 +96,11 @@ Training protocol:
 - For a target season `Y`, train only on labelled seasons `< Y`.
 - Inside the training window, `GroupKFold` over matches selects the number of boosting rounds (mean best iteration across folds); early stopping uses seeded folds.
 - Preprocessing is fit on training seasons only: numeric imputation means, categorical encodings, and the >5% missing-column drop are all train-derived. Match grouping means no match ever spans a fold.
-- The score's absolute scale is arbitrary (ranking is invariant to monotone transforms); scale is absorbed by the temperature.
+- The score's absolute scale is arbitrary (ranking is invariant to monotone transforms). A **positive rescaling** `s → s/τ` is absorbed by the temperature; a general monotone transform is not, because the allocation layer depends on the shape of the gaps between scores, not only their scale.
 
 ## 6. Plackett–Luce allocation and temperature
 
-Given utilities, the match distribution is the sequential Plackett–Luce model in §1. Marginal probabilities of receiving 0/1/2/3 votes are available in closed form (elementary-symmetric sums, implemented exactly), which lets us score calibration at the player-game level without sampling.
+Given utilities, the match distribution is the sequential Plackett–Luce model in §1. Marginal probabilities of receiving 0/1/2/3 votes are available in closed form by direct summation over the first two placements (`O(n²)` per match). The sequential denominator depends on the preceding picks, so symmetric-polynomial shortcuts from other weighted-subset models are **not** valid here; the implementation is audited against exhaustive enumeration on small synthetic matches and against Gumbel-max Monte Carlo simulation on full-size matches, and satisfies the exact invariants (each vote slot sums to one across players; expected match votes sum to six).
 
 The **temperature τ** controls sharpness. It is fitted by maximum likelihood on the observed ordered triples:
 
@@ -126,7 +126,7 @@ That design is structurally overconfident, for four reasons:
 ### What the redesign does instead
 
 - **Discrete allocation, not Gaussian noise.** Every simulation awards exactly 3-2-1 per match via Plackett–Luce. The noise model is the vote process itself, so the constant-sum competition and discreteness are structural, not approximate.
-- **Calibrated temperature.** τ is fitted to observed triples out-of-sample, which is what makes `P(0/1/2/3)` well calibrated at the match level rather than merely ordering players. The fitted τ cuts allocation log-loss from 8.5–9.6 nats (τ=1) to **4.4–6.2 nats**, against 11.4 for a uniform allocation, and Brier scores fall from ~0.106 to **0.073–0.090**.
+- **Calibrated temperature — but the gain is the score generator, not τ.** On the production ranking scores, allocation log-loss is already **4.4–6.0 nats at τ=1** against 11.3–11.4 for a uniform allocation. Fitting τ (leak-free values 0.75–0.83) changes that by only −0.20 to +0.29 nats per season — within the ~0.5–0.9 nats bound on what positive rescaling alone can achieve — and in 2023–2025 the leak-free τ slightly *worsens* NLL because the within-season optimum has drifted towards 1.0. The larger reduction from 8.5–9.6 nats (τ=1) to 7.5–7.6 belongs to the earlier pseudo-Huber regression baseline, whose score scale differs; that improvement is attributable to replacing the baseline with the ranking score generator. Brier scores follow the same pattern (ranking 0.073–0.089 versus baseline ~0.106). Temperature is a one-parameter scaling correction, not a substitute for score quality.
 - **Persistent player-season effects.** Each simulation draws one deviation `b_p^(j) ~ N(0, σ²)` per player and holds it for **all** of their matches: `u_{p,g} = s_{p,g} + b_p^(j)`. Drawing a fresh effect per match would average the season-level uncertainty away — exactly the original failure mode. The scale σ is not assumed: it is chosen by a grid against historical season-total distributions (contender CRPS), selected at **0.4** on 2015–2023.
 - **Simulation, then validation by coverage.** Season totals are built from 10,000 simulated counts; the claim "the intervals are honest" is then tested on held-out seasons rather than asserted. Over 2015–2025:
   - contender 90% intervals covered **88.5%** of observed season totals (nominal 90%)
@@ -138,7 +138,7 @@ That design is structurally overconfident, for four reasons:
 
 ### What is still not modelled
 
-Model-parameter uncertainty (uncertainty about the fitted score function itself) is approximated only through the persistent effect and specification sensitivity. A match-block bootstrap ensemble of score generators (planned Phase 3b) would capture it more directly. The persistent effect is also Gaussian and zero-mean, so it widens without shifting chronically underrated players upward; historical voting priors would address that.
+Model-parameter uncertainty (uncertainty about the fitted score function itself) is approximated only through the persistent effect and specification sensitivity. A match-block bootstrap ensemble of score generators (planned Phase 3b) would capture it more directly. The persistent effect is also Gaussian and zero-mean, so it carries no learned direction for any particular player. It is not neutral for expected votes — the nonlinear allocation means zero-mean utility noise changes vote means — but those shifts are symmetric in expectation; partially pooled historical player intercepts would give the effect a learned direction.
 
 ## 8. Validation protocol and results
 
@@ -161,13 +161,13 @@ Held-out results for the production (`ranking`) score generator:
 | 2024 | 5.80 | 0.49 | 0.52 | 0.61 |
 | 2025 (untouched) | 5.50 | 0.52 | 0.51 | 0.64 |
 
-Per-match top-1 accuracy in the 50–65% range is close to the irreducible difficulty of umpire voting; the design goal is calibrated probabilities, not clairvoyance.
+Per-match top-1 accuracy is 51–67%. The presented results do **not** establish an irreducible ceiling for umpire voting; the design goal is calibrated probabilities, not clairvoyance.
 
 ## 9. Modelling weak points
 
 1. **Context-free utilities.** `s_{p,g}` depends on the player's own features (plus team shares); it does not see the other players in the match. The teammate competition is enforced at the allocation layer but not learned conditionally. Feeding teammate/opponent utility summaries into the score model (two-stage) or a conditional-logit design is the principled extension.
 2. **Compositional errors.** Because each match allocates exactly 6 votes, errors are zero-sum within the match: overrating one player underrates another. The simulation also draws player effects independently, ignoring shared within-match model error.
-3. **Zero-mean persistent effects cannot fix centre bias.** Extreme seasons (2024 Cripps 45, 2025 Rowell 39) were ranked 2nd and 9th; a symmetric effect widens but does not shift. Non-zero player intercepts (historical polling priors) or strength-dependent overdispersion would target this directly.
+3. **Persistent effects are zero-mean and temporally unstructured.** Extreme seasons (2024 Cripps 45, 2025 Rowell 39) were ranked 2nd and 9th; a symmetric effect widens the distribution without adding player-specific direction. Note that zero-mean utility effects are **not** neutral for expected votes — the nonlinear allocation can shift means — but they contain no learned correction for a particular player. Partially pooled player intercepts (historical polling priors) or strength-dependent overdispersion target this directly.
 4. **Temperature only sets scale.** Match-likelihood and season-CRPS optima for τ diverge (sharper τ improves season CRPS but worsens match NLL) — evidence of missing concentration structure rather than a tuning problem.
 5. **No model-parameter uncertainty.** One trained model; no bootstrap ensemble; common bias and temporal drift are probed only via sensitivity analysis.
 6. **Plackett–Luce assumptions.** IIA/restrictive substitution and no context effects. It is a clean, budget-exact baseline; alternatives (Bradley–Terry variants, conditional logit, dependent-error rank models) are testable upgrades.
