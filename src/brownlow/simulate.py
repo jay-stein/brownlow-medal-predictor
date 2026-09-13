@@ -118,6 +118,39 @@ def _allocate_match(
         weights[picks, simulation_index] = 0.0
 
 
+def summarise_totals(
+    players: pd.DataFrame,
+    totals: np.ndarray,
+    eligible: np.ndarray | None = None,
+) -> pd.DataFrame:
+    """Season summary columns shared by every simulator.
+
+    ``totals`` is ``(n_players, n_sims)``. Award probabilities are computed
+    among eligible players only when ``eligible`` is supplied.
+    """
+    summary = players.copy()
+    summary["sim_mean"] = totals.mean(axis=1)
+    summary["sim_median"] = np.median(totals, axis=1)
+    for quantile in QUANTILES:
+        summary[f"sim_q{int(quantile * 100):02d}"] = np.quantile(totals, quantile, axis=1)
+    if eligible is None:
+        eligible = np.ones(totals.shape[0], dtype=bool)
+    award_totals = np.where(eligible[:, None], totals, -1)
+    leaders = award_totals == award_totals.max(axis=0, keepdims=True)
+    summary["p_outright_first"] = (leaders & (leaders.sum(axis=0, keepdims=True) == 1)).mean(axis=1)
+    summary["p_first_or_joint"] = leaders.mean(axis=1)
+    summary["ineligible"] = ~eligible
+    return summary
+
+
+def eligible_mask(players: pd.DataFrame, ineligible: set[str] | None) -> np.ndarray:
+    """Boolean eligibility mask over a players frame."""
+    if not ineligible:
+        return np.ones(len(players), dtype=bool)
+    player_ids = players[PLAYER_COLUMN].astype(str).to_numpy()
+    return ~np.isin(player_ids, list(ineligible))
+
+
 def simulate_season(
     frame: pd.DataFrame,
     tau: float,
@@ -136,11 +169,7 @@ def simulate_season(
     """
     players, matches = prepare_season(frame)
     n_players = len(players)
-    if ineligible:
-        player_ids = players[PLAYER_COLUMN].astype(str).to_numpy()
-        eligible = ~np.isin(player_ids, list(ineligible))
-    else:
-        eligible = np.ones(n_players, dtype=bool)
+    eligible = eligible_mask(players, ineligible)
     rng = np.random.default_rng(seed)
     if effect_scale > 0:
         effects = rng.normal(0.0, effect_scale, size=(n_players, n_sims))
@@ -200,16 +229,7 @@ def simulate_season(
         for match in matches:
             _allocate_match(rng, match.indices, match.utilities, effects, tau, totals, n_sims)
 
-    summary = players.copy()
-    summary["sim_mean"] = totals.mean(axis=1)
-    summary["sim_median"] = np.median(totals, axis=1)
-    for quantile in QUANTILES:
-        summary[f"sim_q{int(quantile * 100):02d}"] = np.quantile(totals, quantile, axis=1)
-    award_totals = np.where(eligible[:, None], totals, -1) if ineligible else totals
-    leaders = award_totals == award_totals.max(axis=0, keepdims=True)
-    summary["p_outright_first"] = (leaders & (leaders.sum(axis=0, keepdims=True) == 1)).mean(axis=1)
-    summary["p_first_or_joint"] = leaders.mean(axis=1)
-    summary["ineligible"] = ~eligible
+    summary = summarise_totals(players, totals, eligible)
     top_rank = min(5, totals.shape[0])
     top5_threshold = np.sort(totals, axis=0)[-top_rank, :]
     summary["p_top5"] = (totals >= top5_threshold[None, :]).mean(axis=1)

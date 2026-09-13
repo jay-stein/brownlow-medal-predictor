@@ -36,6 +36,16 @@ Rolling out-of-sample records for the production model (each season's model, cal
 
 The model is honest rather than decisive: the eventual winner averaged a 21.7% pre-count probability and the favourite won 2 of the 5 most recent counts. 2024 is the standing failure mode — record vote inflation sat outside the centre of every specification.
 
+**Approach comparison** (rolling 2021–2025, suspensions applied; legacy = the original 100-model Normal-draw design, reconstructed faithfully):
+
+| Approach | Contender CRPS | 90% coverage | Favourite won | Winner prior P |
+|---|---|---|---|---|
+| Legacy | 4.77 | 0.20 | 0/5 | 0.000 |
+| **Current production (coaches model)** | **2.85** | 0.88 | **2/5** | **0.217** |
+| Stacking ensemble (LambdaMART + PL + forest) | 2.65 | 0.93 | 1/5 | 0.186 |
+
+Both redesign-era approaches are in a different class from the legacy baseline. The ensemble has the best-calibrated distributions; the single production model keeps the sharpest top-of-count signal and wins the composite rank-sum, so it remains the shipped forecast. The full write-up is in [`docs/methodology.md`](docs/methodology.md#approach-comparison-legacy-vs-current-vs-ensemble).
+
 **2026 forecast** (post-round-24 conditional, 10,000 simulations, 32 suspended players excluded from the medal): **Nick Daicos 45.4 expected votes (90% interval 37–53), 93.0% first-or-joint**, spanning 82–99% across effect-scale specifications; Bailey Smith 31.7 (4.5%) and Patrick Cripps 30.5 (3.4%) are the alternatives.
 
 ## Repository Structure
@@ -137,9 +147,10 @@ The large datasets are **not committed**; see [`data/README.md`](data/README.md)
 - [x] Historical player effects and direct Plackett–Luce training variant.
 - [x] AFLCA coaches' votes as features (the winning variant).
 - [x] Award-stage suspension eligibility with committed sources.
+- [x] **Approach comparison** against the reconstructed legacy baseline and a stacking ensemble (`legacy-roll`, `ensemble-roll`, `compare-approaches`); the current model wins the composite scorecard, the ensemble wins on distributional calibration.
 - [ ] **Plackett–Luce objective + coaches' votes combined** (best match NLL plus the human signal).
 - [ ] **Live in-season variant** that updates weekly with only the information available at that round.
-- [ ] **Match-block bootstrap ensemble** for model-parameter uncertainty.
+- [ ] **Match-block bootstrap ensemble** for model-parameter uncertainty, with award metrics in the selection criterion.
 - [ ] **Retrospective check** of the 2026 forecast once votes are counted.
 
 ## Caveats
