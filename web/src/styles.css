@@ -1138,17 +1138,20 @@ h1 em {
   border-color: rgba(212, 175, 55, 0.4);
 }
 
-.team-chevron {
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
+.team-more {
+  padding: 2px 11px;
+  border-radius: 999px;
   border: 1px solid var(--line);
   color: var(--gold-light);
-  font-size: 0.9rem;
-  line-height: 1;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.team-card header:hover .team-more {
+  border-color: var(--gold);
+  background: rgba(212, 175, 55, 0.12);
 }
 
 .team-detail {

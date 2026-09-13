@@ -188,6 +188,18 @@ def test_team_round_tracking_sums_player_totals():
     assert simulation.team_path_totals.shape[0] == 1
 
 
+def test_team_increment_probabilities_form_a_distribution():
+    simulation = simulate.simulate_season(
+        _multi_round_frame(), tau=1.0, n_sims=200, seed=8, track_rounds=True
+    )
+    probs = simulation.team_increment_probs
+    assert probs.shape == (1, 2, 7)
+    np.testing.assert_allclose(probs.sum(axis=2), 1.0, atol=1e-9)
+    np.testing.assert_allclose(
+        probs[0] @ np.arange(7), simulation.team_increment_mean[0], atol=1e-6
+    )
+
+
 def test_forecast_export_includes_team_rounds():
     simulation = simulate.simulate_season(
         _multi_round_frame(),
