@@ -1,4 +1,4 @@
-import { teamColor } from "./teams.js";
+import TeamLogo from "./TeamLogo.jsx";
 
 export default function TeamsView({ teams }) {
   if (!teams?.length) return null;
@@ -14,7 +14,7 @@ export default function TeamsView({ teams }) {
         {teams.map((team) => (
           <article className="team-card" key={team.name}>
             <header>
-              <span className="dot" style={{ background: teamColor(team.name) }} />
+              <TeamLogo team={team.name} size={24} />
               <h3>{team.name}</h3>
               <strong>{Number(team.expected ?? 0).toFixed(1)}</strong>
             </header>

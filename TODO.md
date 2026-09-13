@@ -7,10 +7,16 @@ held the favourite hit rate (2/5) and raised the average winner probability (0.2
 the gain in 4 of 5 seasons. The context-only variant is similar on CRPS but over-covers, and the
 combined variant is worse than either block alone, so promote the season aggregates only.
 
-- [ ] Train the missing seasons: `baseline --model ranking_season --seasons 2015-2017,2026`
-- [ ] Joint calibration on the full window:
-      `calibrate-joint --model ranking_season --seasons 2015-2025 --tune-seasons 2015-2025`
-- [ ] Historical player effects: `player-effects --model ranking_season --seasons 2015-2025`
-- [ ] Regenerate the forecast and web payload with `--model ranking_season`
-- [ ] Update the web model label, README, methodology and `forecast-2026.md`
+- [x] Train the missing seasons: `baseline --model ranking_season --seasons 2015-2017,2026`
+- [x] Joint calibration on the full window:
+      `calibrate-joint --model ranking_season --seasons 2015-2025 --tune-seasons 2015-2025` (τ=0.8, σ=0.4)
+- [x] Historical player effects: `player-effects --model ranking_season --seasons 2015-2025` (100/4/0, improves 6/8 seasons)
+- [x] Regenerate the forecast and web payload with `--model ranking_season`
+- [x] Update the web model label, README, methodology and `forecast-2026.md`
 - [ ] Re-check the rolling records and the live site after deploy
+
+## Web engagement polish
+
+- [x] **Team logos** in the leaderboard, race legend, teams view and match cards (Squiggle CDN, with a colour-monogram fallback).
+- [x] **Legend/guide** for the match abbreviations (`28d` = disposals, `9g` = goals, `cv` = coaches' votes, `p3/p2/p1` = vote probabilities).
+- [x] **Light probability shading** on the match vote cells (darker = more likely) with a mini bar, kept subtle.
