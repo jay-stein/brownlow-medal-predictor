@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -11,11 +12,13 @@ import pandas as pd
 from . import (
     aflca,
     eligibility,
+    ensemble,
     evaluate,
     features,
     folds,
     history,
     ingest,
+    legacy,
     model,
     paths,
     scores,
@@ -477,6 +480,154 @@ def run_fetch_coaches(args: argparse.Namespace) -> None:
     print(f"\nwrote {len(combined)} rows to {output}")
 
 
+def run_legacy_roll(args: argparse.Namespace) -> None:
+    """Roll the legacy ensemble baseline: train on <Y, simulate Y with Normal draws."""
+    labelled = _load_labelled()
+    seasons = parse_seasons(args.seasons)
+    rows: list[dict] = []
+    for season in seasons:
+        started = time.perf_counter()
+        frame = legacy.load_or_train_legacy(labelled, season, force=args.force)
+        ineligible = eligibility.ineligible_ids(season)
+        simulation = legacy.simulate_legacy_season(
+            frame, n_sims=args.n_sims, seed=args.seed, ineligible=ineligible
+        )
+        metrics = simulate.season_metrics(
+            simulation, contender_count=args.contenders, ineligible=ineligible
+        )
+        rows.append(
+            {
+                "season": season,
+                "tau_selected": float("nan"),
+                "scale_selected": float("nan"),
+                "match_nll": float("nan"),
+                "n_ineligible": len(ineligible),
+                **metrics,
+            }
+        )
+        print(
+            f"legacy {season}: contender CRPS={metrics['mean_crps_contenders']:.3f} "
+            f"cov90={metrics['coverage_90_contenders']:.2f} "
+            f"cov50={metrics['coverage_50_contenders']:.2f} "
+            f"({time.perf_counter() - started:.0f}s)"
+        )
+    table = pd.DataFrame(rows)
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "rolling_legacy.csv"
+    table.to_csv(output_path, index=False)
+    print(f"\nWrote {output_path}")
+
+
+def run_ensemble_roll(args: argparse.Namespace) -> None:
+    """Fit and roll the loss-based stacking ensemble over member models."""
+    labelled = _load_labelled()
+    members = [member.strip() for member in args.members.split(",") if member.strip()]
+    seasons = parse_seasons(args.seasons)
+    taus = [float(value) for value in args.taus.split(",")]
+    scales = [float(value) for value in args.scales.split(",")]
+    members_by_season: dict[int, dict[str, pd.DataFrame]] = {}
+    for season in seasons:
+        started = time.perf_counter()
+        members_by_season[season] = {
+            member: ensemble.member_frame(member, labelled, season, force=args.force)
+            for member in members
+        }
+        print(f"members ready for {season} ({time.perf_counter() - started:.0f}s)")
+
+    weights = ensemble.weight_candidates(members)
+    grid = ensemble.ensemble_grid(
+        members_by_season,
+        seasons,
+        weights,
+        taus,
+        scales,
+        n_sims=args.n_sims,
+        n_draws=args.n_draws,
+        contender_count=args.contenders,
+        seed=args.seed,
+    )
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grid_path = output_dir / "ensemble_grid.csv"
+    grid.to_csv(grid_path, index=False)
+    table = ensemble.rolling_ensemble(
+        grid,
+        report_seasons=parse_seasons(args.report_seasons),
+        min_evidence=args.min_evidence,
+    )
+    table_path = output_dir / "rolling_ensemble.csv"
+    table.to_csv(table_path, index=False)
+
+    columns = [
+        "season",
+        "weights_selected",
+        "tau_selected",
+        "scale_selected",
+        "mean_crps_contenders",
+        "coverage_50_contenders",
+        "coverage_90_contenders",
+        "width_50_contenders",
+        "width_90_contenders",
+        "match_nll",
+        "favorite_won",
+        "winner_probability",
+    ]
+    columns = [column for column in columns if column in table.columns]
+    if not table.empty:
+        with pd.option_context("display.width", 240, "display.max_columns", 40):
+            print(table[columns].round(3).to_string(index=False))
+    print(f"\nWrote {grid_path} and {table_path}")
+
+
+def run_compare_approaches(args: argparse.Namespace) -> None:
+    """Compare legacy, current and ensemble rolling records on shared metrics."""
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    sources = {
+        "legacy": output_dir / "rolling_legacy.csv",
+        "current": output_dir / "rolling_backtest_ranking_coaches.csv",
+        "ensemble": output_dir / "rolling_ensemble.csv",
+    }
+    frames = {}
+    for name, path in sources.items():
+        if path.exists():
+            frames[name] = pd.read_csv(path)
+    if not frames:
+        raise SystemExit("no rolling tables found: run legacy-roll/rolling-backtest/ensemble-roll first")
+
+    seasons = sorted(set.intersection(*(set(frame["season"]) for frame in frames.values())))
+    rows = []
+    for name, frame in frames.items():
+        shared = frame[frame["season"].isin(seasons)]
+        rows.append(
+            {
+                "approach": name,
+                "seasons": len(shared),
+                "contender_crps": shared["mean_crps_contenders"].mean(),
+                "coverage_90": shared["coverage_90_contenders"].mean(),
+                "coverage_50": shared["coverage_50_contenders"].mean(),
+                "width_90": shared["width_90_contenders"].mean(),
+                "match_nll": shared["match_nll"].mean() if shared["match_nll"].notna().any() else float("nan"),
+                "favorites_won": int(shared["favorite_won"].sum()),
+                "winner_probability": shared["winner_probability"].mean(),
+            }
+        )
+    summary = pd.DataFrame(rows).set_index("approach")
+
+    ranks = pd.DataFrame(index=summary.index)
+    ranks["crps"] = summary["contender_crps"].rank(ascending=True)
+    ranks["cov90"] = (summary["coverage_90"] - 0.9).abs().rank(ascending=True)
+    ranks["cov50"] = (summary["coverage_50"] - 0.5).abs().rank(ascending=True)
+    ranks["favorites"] = summary["favorites_won"].rank(ascending=False)
+    summary["rank_sum"] = ranks.sum(axis=1)
+
+    with pd.option_context("display.width", 220):
+        print(summary.round(3).to_string())
+    output_path = output_dir / "comparison_approaches.csv"
+    summary.to_csv(output_path)
+    print(f"\nWrote {output_path}")
+
+
 def run_forecast(args: argparse.Namespace) -> None:
     """Simulate a season's count and report vote spreads and win probabilities."""
     season = args.season
@@ -757,6 +908,34 @@ def main() -> None:
     coaches.add_argument("--out", default="data/aflca_votes.csv")
     coaches.add_argument("--pause", type=float, default=1.0, help="seconds between requests")
 
+    legacy_parser = subparsers.add_parser(
+        "legacy-roll", help="roll the legacy Normal-draw ensemble baseline"
+    )
+    legacy_parser.add_argument("--seasons", default="2018-2025")
+    legacy_parser.add_argument("--n-sims", type=int, default=1000)
+    legacy_parser.add_argument("--contenders", type=int, default=15)
+    legacy_parser.add_argument("--seed", type=int, default=42)
+    legacy_parser.add_argument("--force", action="store_true", help="retrain the 100-model ensemble")
+
+    ensemble_parser = subparsers.add_parser(
+        "ensemble-roll", help="roll the loss-based stacking ensemble"
+    )
+    ensemble_parser.add_argument("--members", default="ranking_coaches,ranking_pl,rf_coaches")
+    ensemble_parser.add_argument("--seasons", default="2018-2025")
+    ensemble_parser.add_argument("--report-seasons", default="2021-2025")
+    ensemble_parser.add_argument("--min-evidence", type=int, default=3)
+    ensemble_parser.add_argument("--taus", default="0.7,0.8,0.9")
+    ensemble_parser.add_argument("--scales", default="0.3,0.4,0.5")
+    ensemble_parser.add_argument("--n-sims", type=int, default=1000)
+    ensemble_parser.add_argument("--n-draws", type=int, default=256)
+    ensemble_parser.add_argument("--contenders", type=int, default=15)
+    ensemble_parser.add_argument("--seed", type=int, default=42)
+    ensemble_parser.add_argument("--force", action="store_true", help="retrain RF members")
+
+    subparsers.add_parser(
+        "compare-approaches", help="compare legacy/current/ensemble rolling records"
+    )
+
     forecast = subparsers.add_parser(
         "forecast", help="simulate a season's count and report probabilities"
     )
@@ -792,6 +971,12 @@ def main() -> None:
         run_player_effects(args)
     elif args.command == "fetch-coaches":
         run_fetch_coaches(args)
+    elif args.command == "legacy-roll":
+        run_legacy_roll(args)
+    elif args.command == "ensemble-roll":
+        run_ensemble_roll(args)
+    elif args.command == "compare-approaches":
+        run_compare_approaches(args)
     elif args.command == "forecast":
         run_forecast(args)
 
