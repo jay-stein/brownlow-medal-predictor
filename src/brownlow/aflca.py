@@ -69,7 +69,7 @@ def _canonical_name(value: str) -> str:
     return " ".join(tokens)
 
 _DATE_HEADER = re.compile(
-    r'<div class="col-12 text-center text-uppercase">\s*<strong>(.*?)</strong>', re.S
+    r'<div class="col-12 text-center text-uppercase">\s*<strong>(.*?)</strong>', re.DOTALL
 )
 _BLOCK_START = re.compile(r'<div class="mb-3">')
 _CLUB_ALT = re.compile(r'class="club_logo"[^>]*alt="([^"]+)"|alt="([^"]+)"[^>]*class="club_logo"')
@@ -77,9 +77,9 @@ _VOTE_ROW = re.compile(
     r'<div class="col-2 text-center">\s*<strong>(\d+)</strong>\s*</div>\s*'
     r'<div class="col-10">\s*(.*?)\s*<span[^>]*class="small font-weight-bold"[^>]*>'
     r"\(([A-Za-z]+)\)</span>",
-    re.S,
+    re.DOTALL,
 )
-_ROUND_HEADING = re.compile(r"<h[23][^>]*>\s*Round\s*([^<]+?)\s*</h[23]>", re.I)
+_ROUND_HEADING = re.compile(r"<h[23][^>]*>\s*Round\s*([^<]+?)\s*</h[23]>", re.IGNORECASE)
 _ROUND_URL = re.compile(r'href="([^"]*leaderboard/(\d{4})/(\d+))"')
 _TAGS = re.compile(r"<[^>]+>")
 
@@ -249,6 +249,7 @@ def _first_names_match(left: str, right: str) -> bool:
 
 
 def _resolve_name(name_key: str, club_key: str, roster: list[tuple[str, str]]) -> str | None:
+    name_key = _canonical_name(name_key)
     exact = [player_id for player_id, key in roster if key == name_key]
     if len(exact) == 1:
         return exact[0]
@@ -352,8 +353,8 @@ def attach_coaches_votes(
     out["COACH_VOTES_SHARE"] = share.where(team_totals > 0)
 
     summary = {
-        "rows": int(len(votes)),
-        "matched_rows": int(len(matched)),
+        "rows": len(votes),
+        "matched_rows": len(matched),
         "match_rate": float(len(matched) / len(votes)) if len(votes) else 0.0,
         "matched_matches": int(matched["PROVIDERID"].nunique()),
     }
