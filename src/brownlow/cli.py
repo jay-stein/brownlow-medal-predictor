@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import (
+    aflca,
     eligibility,
     evaluate,
     features,
@@ -35,6 +36,17 @@ def run_audit() -> None:
     table = features.build_feature_table(
         player_stats, team_stats, player_details=player_details, train_through=2025
     )
+    coaches_path = paths.DATA_DIR / "aflca_votes.csv"
+    if coaches_path.exists():
+        table, coaches_summary = aflca.attach_coaches_votes(table, coaches_path)
+        print(
+            "=== AFL Coaches Association votes ==="
+            f"\nmatched {coaches_summary['matched_rows']} / {coaches_summary['rows']} rows "
+            f"({coaches_summary['match_rate']:.1%}) to "
+            f"{coaches_summary['matched_matches']} matches\n"
+        )
+    else:
+        print("AFLCA votes not found: run `fetch-coaches` to populate COACH_VOTES\n")
     crosswalk = ingest.build_crosswalk(player_stats, votes)
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
 
@@ -443,6 +455,21 @@ def run_player_effects(args: argparse.Namespace) -> None:
     print(f"\nWrote {grid_path}, {table_path} and {selection_path}")
 
 
+def run_fetch_coaches(args: argparse.Namespace) -> None:
+    """Scrape AFL Coaches Association per-match votes for the given seasons."""
+    seasons = parse_seasons(args.seasons)
+    frames = []
+    for season in seasons:
+        print(f"=== {season} ===")
+        frame = aflca.fetch_season(season, pause=args.pause)
+        frames.append(frame)
+    combined = pd.concat(frames, ignore_index=True)
+    output = Path(args.out)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(output, index=False)
+    print(f"\nwrote {len(combined)} rows to {output}")
+
+
 def run_forecast(args: argparse.Namespace) -> None:
     """Simulate a season's count and report vote spreads and win probabilities."""
     season = args.season
@@ -716,6 +743,13 @@ def main() -> None:
     player_effects.add_argument("--seed", type=int, default=42)
     player_effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
 
+    coaches = subparsers.add_parser(
+        "fetch-coaches", help="scrape AFL Coaches Association per-match votes"
+    )
+    coaches.add_argument("--seasons", default="2012-2026")
+    coaches.add_argument("--out", default="data/aflca_votes.csv")
+    coaches.add_argument("--pause", type=float, default=1.0, help="seconds between requests")
+
     forecast = subparsers.add_parser(
         "forecast", help="simulate a season's count and report probabilities"
     )
@@ -749,6 +783,8 @@ def main() -> None:
         run_rolling_backtest(args)
     elif args.command == "player-effects":
         run_player_effects(args)
+    elif args.command == "fetch-coaches":
+        run_fetch_coaches(args)
     elif args.command == "forecast":
         run_forecast(args)
 

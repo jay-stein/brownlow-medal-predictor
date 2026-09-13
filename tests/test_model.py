@@ -84,6 +84,13 @@ def test_ranking_requires_match_ids():
         raise AssertionError("expected ValueError when ranking without match ids")
 
 
+def test_ranking_dmatrix_accepts_instance_weights():
+    X, y, match_ids, _, _ = _synthetic_frame()
+    weights = pd.Series([0.5] * len(X))
+    dmatrix = model.build_dmatrix(X, y, match_ids, ranking=True, weight=weights)
+    assert dmatrix.num_row() == len(X)
+
+
 def test_model_options_registry():
     assert model.model_options(model.RANKING_RECENT)["train_window"] == 6
     assert model.model_options(model.RANKING_WEIGHTED)["recency_half_life"] == 4.0

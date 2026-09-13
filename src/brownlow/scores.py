@@ -79,6 +79,7 @@ def train_season_scores(
         raise ValueError(f"no labelled seasons before {target_season}")
 
     drop_features = list(options.get("drop_features", []))
+    extra_features = list(options.get("extra_features", []))
     train = labelled_rows(labelled)
     train = train[train["ROUND_YEAR"].isin(train_seasons)].reset_index(drop=True)
     evaluation = labelled[labelled["ROUND_YEAR"] == target_season].reset_index(drop=True)
@@ -87,6 +88,9 @@ def train_season_scores(
 
     def select_features(frame: pd.DataFrame) -> pd.DataFrame:
         columns = features.feature_frame(frame)
+        present = [column for column in extra_features if column in frame.columns]
+        if present:
+            columns = pd.concat([columns, frame[present]], axis=1)
         if drop_features:
             columns = columns.drop(columns=[c for c in drop_features if c in columns.columns])
         return columns
@@ -138,6 +142,7 @@ def train_season_scores(
         "train_window": window,
         "recency_half_life": half_life,
         "drop_features": drop_features,
+        "extra_features": extra_features,
         "use_pl": use_pl,
         "n_train_rows": len(train),
         "n_train_matches": int(train["PROVIDERID"].nunique()),

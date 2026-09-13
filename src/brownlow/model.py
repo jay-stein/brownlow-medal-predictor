@@ -28,6 +28,7 @@ RANKING_RECENT = "ranking_recent"
 RANKING_WEIGHTED = "ranking_weighted"
 RANKING_NOCBA = "ranking_nocba"
 RANKING_PL = "ranking_pl"
+RANKING_COACHES = "ranking_coaches"
 
 REGRESSION_PARAMS: dict = {
     "objective": "reg:pseudohubererror",
@@ -69,6 +70,7 @@ MODEL_PARAMS: dict[str, dict] = {
     RANKING_WEIGHTED: RANKING_PARAMS,
     RANKING_NOCBA: RANKING_PARAMS,
     RANKING_PL: PL_PARAMS,
+    RANKING_COACHES: RANKING_PARAMS,
 }
 
 CBA_FEATURES = [
@@ -76,11 +78,14 @@ CBA_FEATURES = [
     "EXTENDEDSTATS_CENTREBOUNCEATTENDANCES_prop",
 ]
 
+COACH_FEATURES = ["COACH_VOTES", "COACH_VOTES_SHARE"]
+
 MODEL_OPTIONS: dict[str, dict] = {
     RANKING_RECENT: {"base": RANKING, "train_window": 6},
     RANKING_WEIGHTED: {"base": RANKING, "recency_half_life": 4.0},
     RANKING_NOCBA: {"base": RANKING, "drop_features": CBA_FEATURES},
     RANKING_PL: {"objective_kind": "pl"},
+    RANKING_COACHES: {"base": RANKING, "extra_features": COACH_FEATURES},
 }
 
 
@@ -123,16 +128,25 @@ def build_dmatrix(
     ranking: bool = False,
     weight: pd.Series | None = None,
 ) -> xgb.DMatrix:
-    """Build a DMatrix, adding ``qid`` groups for ranking objectives."""
+    """Build a DMatrix, adding ``qid`` groups for ranking objectives.
+
+    For ranking objectives XGBoost expects one weight per query (match), so
+    instance weights are averaged within each match; for other objectives the
+    weights are passed through unchanged.
+    """
     if ranking:
         if match_ids is None:
             raise ValueError("match_ids are required for ranking objectives")
         match_ids = pd.Series(match_ids).reset_index(drop=True)
         order, qid = _sorted_groups(match_ids)
         labels = None if y is None else pd.Series(y).reset_index(drop=True).iloc[order]
-        weights = None if weight is None else pd.Series(weight).reset_index(drop=True).iloc[order]
+        if weight is not None:
+            sorted_weight = pd.Series(weight).reset_index(drop=True).iloc[order].to_numpy(dtype=float)
+            group_weight = pd.Series(sorted_weight).groupby(qid).mean().to_numpy(dtype=float)
+        else:
+            group_weight = None
         return xgb.DMatrix(
-            X.iloc[order], label=labels, qid=qid, weight=weights, enable_categorical=True
+            X.iloc[order], label=labels, qid=qid, weight=group_weight, enable_categorical=True
         )
     return xgb.DMatrix(X, label=y, weight=weight, enable_categorical=True)
 
