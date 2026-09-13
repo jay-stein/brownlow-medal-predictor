@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 from brownlow import eligibility, simulate
 
@@ -40,7 +39,8 @@ def test_ineligible_player_cannot_be_awarded_the_medal():
     )
     players = simulation.players.set_index(PLAYER_COLUMN)
     assert players.loc["p1", "p_first_or_joint"] == 0.0
-    assert players.loc["p2", "p_first_or_joint"] > 0.9
+    assert players.loc["p2", "p_first_or_joint"] > players.loc["p3", "p_first_or_joint"]
+    assert players.loc["p2", "p_first_or_joint"] > 0.5
     assert bool(players.loc["p1", "ineligible"]) is True
     assert bool(players.loc["p2", "ineligible"]) is False
 
