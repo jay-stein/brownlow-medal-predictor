@@ -173,6 +173,40 @@ def test_forecast_export_payload_shapes():
     assert payload["matches"] == []
 
 
+def test_team_round_tracking_sums_player_totals():
+    simulation = simulate.simulate_season(
+        _multi_round_frame(), tau=1.0, n_sims=200, seed=8, track_rounds=True
+    )
+    assert simulation.team_names == ["T"]
+    assert simulation.team_cumulative_quantiles.shape == (1, 2, 5)
+    np.testing.assert_allclose(
+        simulation.team_cumulative_mean[0, -1], simulation.totals.sum(axis=0).mean()
+    )
+    assert simulation.team_cumulative_mean[0, 0] == pytest.approx(6.0)
+    np.testing.assert_allclose(simulation.team_increment_mean[0], [6.0, 6.0])
+    assert simulation.team_increment_mean.shape == (1, 2)
+    assert simulation.team_path_totals.shape[0] == 1
+
+
+def test_forecast_export_includes_team_rounds():
+    simulation = simulate.simulate_season(
+        _multi_round_frame(),
+        tau=1.0,
+        n_sims=200,
+        seed=8,
+        track_rounds=True,
+        track_matches=True,
+        path_count=10,
+    )
+    players = simulation.players.sort_values("sim_mean", ascending=False)
+    payload = simulate.forecast_export(simulation, players, top=4, metadata={"season": 2024})
+    team = payload["teams"][0]
+    assert team["rounds"] is not None
+    assert len(team["rounds"]["cumMean"]) == len(payload["rounds"])
+    assert len(team["rounds"]["incMean"]) == len(payload["rounds"])
+    assert len(team["rounds"]["paths"]) == 10
+
+
 def test_match_tracking_records_slots_and_triples():
     simulation = simulate.simulate_season(
         _multi_round_frame(), tau=1.0, n_sims=200, seed=8, track_matches=True
