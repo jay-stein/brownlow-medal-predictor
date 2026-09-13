@@ -66,22 +66,39 @@ def train_season_scores(
     seed: int = 42,
 ) -> SeasonScores:
     """Train on all labelled seasons before ``target_season`` and score it."""
+    options = model.model_options(model_key)
+    base_key = options.get("base", model_key)
+    use_pl = options.get("objective_kind") == "pl"
+    fold_params = params if params is not None else model.objective_params(base_key)
+
     labelled_seasons = sorted(int(s) for s in labelled["ROUND_YEAR"].unique())
-    train_seasons = [s for s in labelled_seasons if s < target_season]
+    available = [s for s in labelled_seasons if s < target_season]
+    window = options.get("train_window")
+    train_seasons = available[-window:] if window else available
     if not train_seasons:
         raise ValueError(f"no labelled seasons before {target_season}")
 
-    fold_params = params if params is not None else model.objective_params(model_key)
-
+    drop_features = list(options.get("drop_features", []))
     train = labelled_rows(labelled)
     train = train[train["ROUND_YEAR"].isin(train_seasons)].reset_index(drop=True)
     evaluation = labelled[labelled["ROUND_YEAR"] == target_season].reset_index(drop=True)
     if evaluation.empty:
         raise ValueError(f"no rows for season {target_season}")
 
-    preprocessor = features.FeaturePreprocessor().fit(features.feature_frame(train))
-    X_train = preprocessor.transform(features.feature_frame(train))
+    def select_features(frame: pd.DataFrame) -> pd.DataFrame:
+        columns = features.feature_frame(frame)
+        if drop_features:
+            columns = columns.drop(columns=[c for c in drop_features if c in columns.columns])
+        return columns
+
+    preprocessor = features.FeaturePreprocessor().fit(select_features(train))
+    X_train = preprocessor.transform(select_features(train))
     y_train = train["BROWNLOW_VOTES_AUDITED"].astype(float)
+
+    sample_weight = None
+    half_life = options.get("recency_half_life")
+    if half_life:
+        sample_weight = 0.5 ** ((target_season - 1 - train["ROUND_YEAR"]) / half_life)
 
     cv = model.select_best_round(
         X_train,
@@ -94,6 +111,8 @@ def train_season_scores(
         early_stopping_rounds=early_stopping_rounds,
         n_splits=n_splits,
         seed=seed,
+        sample_weight=sample_weight,
+        use_pl=use_pl,
     )
     booster = model.fit_utilities(
         X_train,
@@ -102,18 +121,24 @@ def train_season_scores(
         params=fold_params,
         match_ids=train["PROVIDERID"],
         seed=seed,
+        sample_weight=sample_weight,
+        use_pl=use_pl,
     )
 
-    X_eval = preprocessor.transform(features.feature_frame(evaluation))
+    X_eval = preprocessor.transform(select_features(evaluation))
     frame = evaluation.loc[:, KEY_COLUMNS].copy()
     frame[UTILITY_COLUMN] = model.predict_utilities(booster, X_eval)
 
     metadata = {
         "season": int(target_season),
         "model_key": model_key,
-        "objective": fold_params.get("objective"),
-        "eval_metric": fold_params.get("eval_metric"),
+        "objective": cv["objective"],
+        "eval_metric": cv["eval_metric"],
         "train_seasons": train_seasons,
+        "train_window": window,
+        "recency_half_life": half_life,
+        "drop_features": drop_features,
+        "use_pl": use_pl,
         "n_train_rows": len(train),
         "n_train_matches": int(train["PROVIDERID"].nunique()),
         "n_eval_rows": len(evaluation),

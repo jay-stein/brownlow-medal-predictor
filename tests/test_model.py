@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from brownlow import model
+from brownlow import model, pl
 
 
 def _synthetic_frame(
@@ -82,3 +82,62 @@ def test_ranking_requires_match_ids():
         assert "match_ids" in str(error)
     else:
         raise AssertionError("expected ValueError when ranking without match ids")
+
+
+def test_model_options_registry():
+    assert model.model_options(model.RANKING_RECENT)["train_window"] == 6
+    assert model.model_options(model.RANKING_WEIGHTED)["recency_half_life"] == 4.0
+    assert model.model_options(model.RANKING_NOCBA)["drop_features"] == model.CBA_FEATURES
+    assert model.is_pl(model.RANKING_PL)
+    assert not model.is_pl(model.RANKING)
+
+
+def test_pl_gradient_matches_finite_differences():
+    rng = np.random.default_rng(5)
+    for _ in range(5):
+        n = int(rng.integers(4, 9))
+        scores = rng.normal(size=n)
+        order = rng.choice(n, size=3, replace=False)
+        gradient, _ = model._pl_grad_hess(scores, order, 1.0)
+        numeric = np.zeros(n)
+        step = 1e-6
+        for index in range(n):
+            plus = scores.copy()
+            plus[index] += step
+            minus = scores.copy()
+            minus[index] -= step
+            triple = tuple(int(value) for value in order)
+            numerator = pl.match_log_likelihood(plus, triple, 1.0) - pl.match_log_likelihood(
+                minus, triple, 1.0
+            )
+            numeric[index] = -numerator / (2 * step)
+        np.testing.assert_allclose(gradient, numeric, atol=1e-5)
+
+
+def test_pl_training_smoke():
+    X, y, match_ids, season_ids, round_ids = _synthetic_frame()
+    result = model.select_best_round(
+        X,
+        y,
+        match_ids,
+        season_ids,
+        round_ids,
+        params=model.PL_PARAMS,
+        num_boost_round=5,
+        early_stopping_rounds=3,
+        n_splits=1,
+        seed=0,
+        use_pl=True,
+    )
+    booster = model.fit_utilities(
+        X,
+        y,
+        result["best_round"],
+        params=model.PL_PARAMS,
+        match_ids=match_ids,
+        seed=0,
+        use_pl=True,
+    )
+    predictions = model.predict_utilities(booster, X)
+    assert np.isfinite(predictions).all()
+    assert result["eval_metric"] == "pl_nll"
