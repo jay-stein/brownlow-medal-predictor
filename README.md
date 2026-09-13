@@ -21,7 +21,7 @@ Predicts AFL Brownlow Medal votes for every game of a season, then simulates the
 
 ## Probabilistic pipeline (in progress)
 
-The `src/brownlow/` package implements the redesign: 124 features (the original 120 plus centre-bounce attendances, player height, and height relative to same-position peers), two score generators, and calibrated season simulation.
+The `src/brownlow/` package implements the redesign: 124 features (the original 120 plus centre-bounce attendances, player height, and height relative to same-position peers), two score generators, and calibrated season simulation. The full mathematical treatment — including the Brownlow fixed-budget mechanics and how uncertainty is handled — is in [`docs/methodology.md`](docs/methodology.md).
 
 1. **Audited labels** — `ingest.py` builds a Champion Data ↔ AFL Tables player crosswalk (compact name keys, surname/team/date fallback, generational-suffix handling) and attaches **three-state labels**:
    - `voted` — matched to a resolved match record and polled votes
