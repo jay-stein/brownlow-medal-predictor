@@ -15,6 +15,9 @@ held-out seasons (see :mod:`brownlow.folds`).
 
 from __future__ import annotations
 
+import os
+import subprocess
+
 import numpy as np
 import pandas as pd
 import xgboost as xgb
@@ -107,7 +110,37 @@ def objective_params(model_key: str) -> dict:
     """Return a copy of the default parameters for a registered model."""
     if model_key not in MODEL_PARAMS:
         raise ValueError(f"unknown model: {model_key!r}")
-    return dict(MODEL_PARAMS[model_key])
+    params = dict(MODEL_PARAMS[model_key])
+    params.setdefault("device", default_device())
+    return params
+
+
+_DEVICE: str | None = None
+
+
+def cuda_available() -> bool:
+    """Whether XGBoost has CUDA support and an NVIDIA GPU is present."""
+    if not xgb.build_info().get("USE_CUDA", False):
+        return False
+    try:
+        subprocess.run(["nvidia-smi"], capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return True
+
+
+def default_device() -> str:
+    """Training device, read once from ``BROWNLOW_XGB_DEVICE`` (default cpu).
+
+    GPU hist was benchmarked at parity with CPU on this workload (small
+    tabular data with thousands of small ranking groups), so CPU stays the
+    default for exact reproducibility with the cached score files. Set
+    ``BROWNLOW_XGB_DEVICE=cuda`` to opt in.
+    """
+    global _DEVICE
+    if _DEVICE is None:
+        _DEVICE = os.environ.get("BROWNLOW_XGB_DEVICE", "").strip().lower() or "cpu"
+    return _DEVICE
 
 
 def is_ranking(params: dict) -> bool:

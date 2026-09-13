@@ -95,8 +95,18 @@ def test_model_options_registry():
     assert model.model_options(model.RANKING_RECENT)["train_window"] == 6
     assert model.model_options(model.RANKING_WEIGHTED)["recency_half_life"] == 4.0
     assert model.model_options(model.RANKING_NOCBA)["drop_features"] == model.CBA_FEATURES
+    assert model.model_options(model.RANKING_COACHES)["extra_features"] == model.COACH_FEATURES
     assert model.is_pl(model.RANKING_PL)
     assert not model.is_pl(model.RANKING)
+
+
+def test_default_device_reads_environment(monkeypatch):
+    monkeypatch.setenv("BROWNLOW_XGB_DEVICE", "cuda")
+    monkeypatch.setattr(model, "_DEVICE", None)
+    assert model.default_device() == "cuda"
+    monkeypatch.setenv("BROWNLOW_XGB_DEVICE", "")
+    monkeypatch.setattr(model, "_DEVICE", None)
+    assert model.default_device() == "cpu"
 
 
 def test_pl_gradient_matches_finite_differences():
