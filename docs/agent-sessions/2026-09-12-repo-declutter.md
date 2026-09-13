@@ -44,6 +44,7 @@ Everything removed remains recoverable from git history.
 
 - Tracked files: **105 → 57**; repository size **26.4 MB → 0.8 MB**
 - No code references to removed paths; tests and lint unaffected
+- Local cleanup: deleted three superseded extracts from disk (`player_stats_2018_2025`, `team_stats_2018_2025`, `brownlow_stats_2018_2024`, ~71 MB) now that the 2012–2026/2012–2025 files supersede them, and added `.pytest_cache/` and `.ruff_cache/` to `.gitignore`
 - The active project is now just: R extraction scripts, the `src/brownlow` package, tests, the web app, docs, and project configuration
 
 ## Important Decisions
