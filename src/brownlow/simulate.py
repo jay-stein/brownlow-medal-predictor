@@ -60,6 +60,7 @@ class SeasonSimulation:
     team_cumulative_quantiles: np.ndarray | None = None
     team_increment_mean: np.ndarray | None = None
     team_increment_quantiles: np.ndarray | None = None
+    team_increment_probs: np.ndarray | None = None
     team_path_totals: np.ndarray | None = None
 
 
@@ -254,6 +255,7 @@ def simulate_season(
     team_cumulative_quantiles = None
     team_increment_mean = None
     team_increment_quantiles = None
+    team_increment_probs = None
     team_path_totals = None
     match_groups = None
     match_slot_counts = None
@@ -293,6 +295,7 @@ def simulate_season(
         team_cumulative_quantiles = np.zeros((n_teams, len(rounds), len(ROUND_QUANTILES)))
         team_increment_mean = np.zeros((n_teams, len(rounds)))
         team_increment_quantiles = np.zeros((n_teams, len(rounds), len(ROUND_QUANTILES)))
+        team_increment_probs = np.zeros((n_teams, len(rounds), 7))
         team_previous = np.zeros((n_teams, n_sims))
 
         ordered = sorted(matches, key=lambda match: round_position[match.round_number])
@@ -342,6 +345,10 @@ def simulate_season(
             team_increment_quantiles[:, round_index, :] = np.quantile(
                 team_increment, ROUND_QUANTILES, axis=1
             ).T
+            team_values = np.clip(np.rint(team_increment).astype(int), 0, 6)
+            for team_index in range(n_teams):
+                counts = np.bincount(team_values[team_index], minlength=7)
+                team_increment_probs[team_index, round_index, :] = counts / n_sims
             team_previous[:] = team_totals
 
         team_path_totals = np.stack(
@@ -393,6 +400,7 @@ def simulate_season(
         team_cumulative_quantiles=team_cumulative_quantiles,
         team_increment_mean=team_increment_mean,
         team_increment_quantiles=team_increment_quantiles,
+        team_increment_probs=team_increment_probs,
         team_path_totals=team_path_totals,
     )
 
@@ -533,6 +541,17 @@ def forecast_export(
                 "incMedian": [_rounded(value) for value in increment[:, 2]],
                 "incQ75": [_rounded(value) for value in increment[:, 3]],
                 "incQ95": [_rounded(value) for value in increment[:, 4]],
+                "incProbs": (
+                    [
+                        [
+                            _rounded(value, 4)
+                            for value in simulation.team_increment_probs[index, round_index]
+                        ]
+                        for round_index in range(simulation.team_increment_probs.shape[1])
+                    ]
+                    if simulation.team_increment_probs is not None
+                    else None
+                ),
                 "paths": paths,
             }
 

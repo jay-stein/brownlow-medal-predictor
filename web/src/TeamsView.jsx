@@ -1,117 +1,140 @@
-import { useState } from "react";
-import {
-  Area,
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Fragment, useState } from "react";
 import TeamLogo from "./TeamLogo.jsx";
 import WormChart from "./WormChart.jsx";
 
-function TeamRoundTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
+const TEAM_ROWS = [
+  { key: "fiveSix", label: "5-6 votes", color: "246, 226, 122", bracket: (probs) => (probs?.[5] ?? 0) + (probs?.[6] ?? 0) },
+  { key: "threeFour", label: "3-4 votes", color: "227, 184, 74", bracket: (probs) => (probs?.[3] ?? 0) + (probs?.[4] ?? 0) },
+  { key: "oneTwo", label: "1-2 votes", color: "176, 128, 40", bracket: (probs) => (probs?.[1] ?? 0) + (probs?.[2] ?? 0) },
+  { key: "zero", label: "0 votes", color: "120, 130, 160", bracket: (probs) => probs?.[0] ?? 0 },
+];
+
+function percent(value) {
+  return `${Math.round((value ?? 0) * 100)}%`;
+}
+
+function TeamRoundVotes({ team, rounds, matches, teamName }) {
+  const [activeRound, setActiveRound] = useState(null);
+  const probs = team.rounds?.incProbs ?? [];
+
+  const hotRounds = rounds
+    .map((round, index) => ({ ...round, index, probability: TEAM_ROWS[0].bracket(probs[index]) }))
+    .sort((a, b) => b.probability - a.probability)
+    .filter((entry) => entry.probability >= 0.05)
+    .slice(0, 3);
+  const hotIndexes = new Set(hotRounds.map((entry) => entry.index));
+
+  const opponentFor = (roundNumber) => {
+    const match = (matches ?? []).find(
+      (candidate) =>
+        candidate.round === roundNumber && (candidate.home === teamName || candidate.away === teamName)
+    );
+    if (!match) return null;
+    return match.home === teamName ? `vs ${match.away}` : `at ${match.home}`;
+  };
+
+  const detail = activeRound === null ? null : {
+    ...rounds[activeRound],
+    opponent: opponentFor(rounds[activeRound].number),
+    expected: team.rounds?.incMean?.[activeRound] ?? 0,
+  };
+
   return (
-    <div className="chart-tooltip">
-      <div className="tooltip-title">{label}</div>
-      <div className="tooltip-row">
-        <span>Expected votes</span>
-        <b>{row.incMean}</b>
+    <div className="round-votes">
+      <div className="hot-rounds">
+        <span className="hot-label">Likeliest big-vote rounds</span>
+        {hotRounds.length === 0 ? (
+          <span className="hot-empty">No round is a strong 5-6 vote chance</span>
+        ) : (
+          hotRounds.map((entry) => (
+            <span className="hot-chip" key={entry.number}>
+              {entry.label} <b>{percent(entry.probability)}</b>
+            </span>
+          ))
+        )}
       </div>
-      <div className="tooltip-row">
-        <span>50% range</span>
-        <b>
-          {row.incQ25} – {row.incQ75}
-        </b>
+
+      <div className="heatmap-scroll">
+        <div
+          className="heatmap"
+          style={{ gridTemplateColumns: `96px repeat(${rounds.length}, minmax(34px, 1fr))` }}
+        >
+          <div className="heatmap-corner" />
+          {rounds.map((round, index) => (
+            <div
+              key={`head-${round.number}`}
+              className={`heatmap-col-label ${hotIndexes.has(index) ? "hot" : ""}`}
+            >
+              {round.label}
+            </div>
+          ))}
+          {TEAM_ROWS.map((row) => (
+            <Fragment key={row.key}>
+              <div className="heatmap-row-label">{row.label}</div>
+              {rounds.map((round, index) => {
+                const probability = row.bracket(probs[index]);
+                const alpha = probability <= 0 ? 0.04 : 0.1 + 0.9 * probability;
+                const strong = probability >= 0.45;
+                return (
+                  <button
+                    key={`${row.key}-${round.number}`}
+                    type="button"
+                    className={`heatmap-cell ${strong ? "strong" : ""} ${
+                      activeRound === index ? "active" : ""
+                    }`}
+                    style={{
+                      background: `rgba(${row.color}, ${alpha})`,
+                      color: strong ? "#241a00" : "#dfe5f3",
+                    }}
+                    onMouseEnter={() => setActiveRound(index)}
+                    onMouseLeave={() => setActiveRound((value) => (value === index ? null : value))}
+                    onFocus={() => setActiveRound(index)}
+                    onClick={() => setActiveRound(index)}
+                    title={`${round.label}: ${row.label} ${percent(probability)}`}
+                  >
+                    {probability >= 0.08 ? percent(probability) : ""}
+                  </button>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
       </div>
-      <div className="tooltip-row">
-        <span>90% range</span>
-        <b>
-          {row.incQ05} – {row.incQ95}
-        </b>
+
+      <div className="round-detail">
+        {detail ? (
+          <>
+            <span className="round-detail-title">
+              {detail.label}
+              {detail.opponent ? ` · ${detail.opponent}` : ""}
+            </span>
+            <span>
+              5-6 votes <b>{percent(TEAM_ROWS[0].bracket(probs[activeRound]))}</b>
+            </span>
+            <span>
+              3-4 votes <b>{percent(TEAM_ROWS[1].bracket(probs[activeRound]))}</b>
+            </span>
+            <span>
+              1-2 votes <b>{percent(TEAM_ROWS[2].bracket(probs[activeRound]))}</b>
+            </span>
+            <span>
+              0 votes <b>{percent(TEAM_ROWS[3].bracket(probs[activeRound]))}</b>
+            </span>
+            <span>
+              Expected <b>{Number(detail.expected).toFixed(2)}</b> votes
+            </span>
+          </>
+        ) : (
+          <span className="round-detail-hint">
+            Hover a cell to see the vote distribution for that round
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function TeamRoundChart({ data }) {
-  return (
-    <ResponsiveContainer width="100%" height={320}>
-      <ComposedChart data={data} margin={{ top: 16, right: 24, bottom: 8, left: 0 }}>
-        <defs>
-          <linearGradient id="teamRoundOuter" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f6e27a" stopOpacity={0.2} />
-            <stop offset="100%" stopColor="#d4af37" stopOpacity={0.04} />
-          </linearGradient>
-          <linearGradient id="teamRoundInner" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f6e27a" stopOpacity={0.4} />
-            <stop offset="100%" stopColor="#c39a1f" stopOpacity={0.14} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid stroke="rgba(212,175,55,0.12)" vertical={false} />
-        <XAxis
-          dataKey="round"
-          interval={2}
-          tick={{ fill: "#9aa4bf", fontSize: 12 }}
-          tickLine={false}
-          axisLine={{ stroke: "rgba(212,175,55,0.25)" }}
-        />
-        <YAxis tick={{ fill: "#9aa4bf", fontSize: 12 }} tickLine={false} axisLine={false} width={44} />
-        <Tooltip
-          content={<TeamRoundTooltip />}
-          cursor={{ fill: "rgba(246,226,122,0.06)" }}
-        />
-        <Area type="monotone" dataKey="incQ05" stackId="outer" stroke="none" fill="transparent" isAnimationActive={false} />
-        <Area type="monotone" dataKey="incOuter" stackId="outer" stroke="none" fill="url(#teamRoundOuter)" isAnimationActive={false} />
-        <Area type="monotone" dataKey="incQ25" stackId="inner" stroke="none" fill="transparent" isAnimationActive={false} />
-        <Area type="monotone" dataKey="incInner" stackId="inner" stroke="none" fill="url(#teamRoundInner)" isAnimationActive={false} />
-        <Bar
-          dataKey="incMean"
-          fill="#f6e27a"
-          fillOpacity={0.8}
-          radius={[4, 4, 0, 0]}
-          isAnimationActive={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
-  );
-}
-
-function teamChartData(team, rounds) {
-  const source = team.rounds;
-  if (!source?.cumMean) return null;
-  return rounds.map((round, index) => {
-    const row = {
-      round: round.label,
-      cumMean: source.cumMean[index],
-      cumQ05: source.cumQ05[index],
-      cumQ25: source.cumQ25[index],
-      cumMedian: source.cumMedian[index],
-      cumQ75: source.cumQ75[index],
-      cumQ95: source.cumQ95[index],
-      cumOuter: source.cumQ95[index] - source.cumQ05[index],
-      cumInner: source.cumQ75[index] - source.cumQ25[index],
-      incMean: source.incMean[index],
-      incQ05: source.incQ05[index],
-      incQ25: source.incQ25[index],
-      incMedian: source.incMedian[index],
-      incQ75: source.incQ75[index],
-      incQ95: source.incQ95[index],
-      incOuter: source.incQ95[index] - source.incQ05[index],
-      incInner: source.incQ75[index] - source.incQ25[index],
-    };
-    (source.paths ?? []).forEach((path, pathIndex) => {
-      row[`path_${pathIndex}`] = path[index];
-    });
-    return row;
-  });
-}
-
-export default function TeamsView({ teams, rounds }) {
+export default function TeamsView({ teams, rounds, matches }) {
   const [expanded, setExpanded] = useState(null);
   const [mode, setMode] = useState("cumulative");
   if (!teams?.length) return null;
@@ -128,7 +151,35 @@ export default function TeamsView({ teams, rounds }) {
       <div className="team-grid">
         {teams.map((team) => {
           const isOpen = expanded === team.name;
-          const chartData = isOpen ? teamChartData(team, rounds ?? []) : null;
+          const chartData =
+            isOpen && team.rounds?.cumMean
+              ? (rounds ?? []).map((round, index) => {
+                  const source = team.rounds;
+                  const row = {
+                    round: round.label,
+                    cumMean: source.cumMean[index],
+                    cumQ05: source.cumQ05[index],
+                    cumQ25: source.cumQ25[index],
+                    cumMedian: source.cumMedian[index],
+                    cumQ75: source.cumQ75[index],
+                    cumQ95: source.cumQ95[index],
+                    cumOuter: source.cumQ95[index] - source.cumQ05[index],
+                    cumInner: source.cumQ75[index] - source.cumQ25[index],
+                    incMean: source.incMean[index],
+                    incQ05: source.incQ05[index],
+                    incQ25: source.incQ25[index],
+                    incMedian: source.incMedian[index],
+                    incQ75: source.incQ75[index],
+                    incQ95: source.incQ95[index],
+                    incOuter: source.incQ95[index] - source.incQ05[index],
+                    incInner: source.incQ75[index] - source.incQ25[index],
+                  };
+                  (source.paths ?? []).forEach((path, pathIndex) => {
+                    row[`path_${pathIndex}`] = path[index];
+                  });
+                  return row;
+                })
+              : null;
           return (
             <article className={isOpen ? "team-card expanded" : "team-card"} key={team.name}>
               <header
@@ -149,7 +200,7 @@ export default function TeamsView({ teams, rounds }) {
                 <TeamLogo team={team.name} size={24} />
                 <h3>{team.name}</h3>
                 <strong>{Number(team.expected ?? 0).toFixed(1)}</strong>
-                <span className="team-chevron">{isOpen ? "−" : "+"}</span>
+                <span className="team-more">{isOpen ? "Less" : "More"}</span>
               </header>
               <div className="team-band" aria-hidden="true">
                 <span
@@ -198,13 +249,13 @@ export default function TeamsView({ teams, rounds }) {
                       showPaths={false}
                     />
                   ) : (
-                    <TeamRoundChart data={chartData} />
+                    <TeamRoundVotes
+                      team={team}
+                      rounds={rounds ?? []}
+                      matches={matches ?? []}
+                      teamName={team.name}
+                    />
                   )}
-                  <p className="team-range-text">
-                    {mode === "cumulative"
-                      ? "Cumulative expected team votes by round, with 50% and 90% bands from the 10,000 simulated counts."
-                      : "Expected team votes in each round, with 50% and 90% bands. A team plays once per round, so each bar is that match's share of the six votes."}
-                  </p>
                 </div>
               ) : null}
             </article>
