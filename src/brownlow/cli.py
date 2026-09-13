@@ -25,6 +25,9 @@ from . import (
     simulate,
     validation,
 )
+from . import (
+    reports as reports_mod,
+)
 
 
 def run_audit() -> None:
@@ -803,11 +806,21 @@ def run_forecast(args: argparse.Namespace) -> None:
     if args.web_json is not None:
         reports_path = paths.DATA_DIR / f"match_reports_{season}.json"
         reports = json.loads(reports_path.read_text()) if reports_path.exists() else None
+        stats_columns = ["DISPOSALS", "GOALS", "COACH_VOTES", "RATINGPOINTS"]
+        season_stats = labelled[labelled["ROUND_YEAR"] == season]
+        match_stats = (
+            season_stats.set_index(["PROVIDERID", "PLAYER_PLAYER_PLAYER_PLAYERID"])[
+                stats_columns
+            ].to_dict("index")
+            if not season_stats.empty
+            else {}
+        )
         payload = simulate.forecast_export(
             simulation,
             players,
             top=args.web_players,
             reports=reports,
+            match_stats=match_stats,
             metadata={
                 "season": season,
                 "model": model_key,

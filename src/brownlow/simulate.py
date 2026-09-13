@@ -69,6 +69,7 @@ class MatchGroup:
     home_score: float | None = None
     away_score: float | None = None
     game_date: str | None = None
+    venue: str | None = None
 
 
 def _first_value(group: pd.DataFrame, column: str):
@@ -125,6 +126,7 @@ def prepare_season(
                 home_score=_first_value(group, "HOMETEAMSCORE_MATCHSCORE_TOTALSCORE"),
                 away_score=_first_value(group, "AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE"),
                 game_date=_first_value(group, "GAME_DATE"),
+                venue=_first_value(group, "VENUE_NAME"),
             )
         )
     return players, matches
@@ -396,6 +398,7 @@ def forecast_export(
     top: int = 50,
     metadata: dict | None = None,
     reports: dict[str, dict] | None = None,
+    match_stats: dict[tuple[str, str], dict] | None = None,
 ) -> dict:
     """Build a compact JSON-ready payload for the interactive web visualisation."""
     if simulation.rounds is None or simulation.cumulative_quantiles is None:
@@ -494,6 +497,9 @@ def forecast_export(
             vote_rows = []
             for local in leaders:
                 row = simulation.players.iloc[match.indices[local]]
+                stats = (match_stats or {}).get(
+                    (match.match_id, str(row[PLAYER_COLUMN])), {}
+                )
                 vote_rows.append(
                     {
                         "id": str(row[PLAYER_COLUMN]),
@@ -502,6 +508,10 @@ def forecast_export(
                         "p3": _rounded(probabilities[local, 0], 4),
                         "p2": _rounded(probabilities[local, 1], 4),
                         "p1": _rounded(probabilities[local, 2], 4),
+                        "disposals": _rounded(stats.get("DISPOSALS"), 0),
+                        "goals": _rounded(stats.get("GOALS"), 0),
+                        "coachVotes": _rounded(stats.get("COACH_VOTES"), 0),
+                        "ratingPoints": _rounded(stats.get("RATINGPOINTS"), 1),
                     }
                 )
             triples = sorted(
@@ -523,6 +533,7 @@ def forecast_export(
                 "date": str(match.game_date) if match.game_date is not None else None,
                 "home": match.home_team,
                 "away": match.away_team,
+                "venue": match.venue,
                 "homeScore": int(match.home_score) if match.home_score is not None else None,
                 "awayScore": int(match.away_score) if match.away_score is not None else None,
                 "votes": vote_rows,
