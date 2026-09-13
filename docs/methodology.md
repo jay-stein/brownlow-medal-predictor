@@ -172,6 +172,18 @@ Rolling records for the production `ranking_coaches` model:
 
 Per-match top-1 accuracy is 51–67%. The presented results do **not** establish an irreducible ceiling for umpire voting; the design goal is calibrated probabilities, not clairvoyance.
 
+### Approach comparison: legacy vs current vs ensemble
+
+The first-generation design was reconstructed faithfully and rolled with the same protocol (100 feature-bagged XGBoost regressors on the original 120 features, independent Normal season counts from the ensemble spread; `legacy.py`). The stacking ensemble combines three members — the production LambdaMART+coaches model, the direct Plackett–Luce model, and a random-forest regressor with coaches' votes — by globally standardised weighted utilities, with weights, τ and σ selected on earlier out-of-sample seasons by the same predeclared criterion. All three are scored on 2021–2025 with suspensions applied:
+
+| Approach | Contender CRPS | 90% coverage | 50% coverage | Favourite won | Winner prior P | Match NLL | Rank-sum |
+|---|---|---|---|---|---|---|---|
+| Legacy (100-model Normal draws) | 4.77 | 0.20 | 0.09 | 0/5 | 0.000 | n/a | 12 |
+| **Current production** (`ranking_coaches`) | **2.85** | 0.88 | 0.52 | **2/5** | **0.217** | **5.24** | **5** |
+| Stacking ensemble | 2.65 | 0.93 | 0.57 | 1/5 | 0.186 | 5.26 | 7 |
+
+The legacy baseline is overconfident in exactly the way the redesign diagnosed: a fifth of its 90% intervals covered and none of its five favourites won. Both redesign-era approaches are in a different class. Between them it is a genuine trade-off: the ensemble has the best-calibrated vote distributions (CRPS, coverage), while the single production model keeps the sharpest top-of-count signal (favourite hits, winner probability). The composite rank-sum across calibration and accuracy favours the current model, so it remains the shipped forecast; the ensemble is the better alternative if interval honesty is weighted above top-pick accuracy. A hindsight oracle that picks the best ensemble weights per season reaches CRPS 2.37, so **selection quality, not the member pool, is the binding constraint** — worth revisiting once more medal outcomes accumulate.
+
 ## 9. Modelling weak points
 
 1. **Context-free utilities.** `s_{p,g}` depends on the player's own features (plus team shares); it does not see the other players in the match. The teammate competition is enforced at the allocation layer but not learned conditionally. Feeding teammate/opponent utility summaries into the score model (two-stage) or a conditional-logit design is the principled extension.
