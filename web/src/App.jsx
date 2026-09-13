@@ -9,6 +9,7 @@ import TeamsView from "./TeamsView.jsx";
 import TopWorms from "./TopWorms.jsx";
 import WormChart from "./WormChart.jsx";
 import { teamColor } from "./teams.js";
+import useNarrow from "./useNarrow.js";
 
 function pct(value, digits = 1) {
   if (value === null || value === undefined) return "—";
@@ -23,6 +24,7 @@ export default function App() {
   const [showPaths, setShowPaths] = useState(true);
   const [query, setQuery] = useState("");
   const [view, setView] = useState("contenders");
+  const narrow = useNarrow();
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}forecast_2026.json`)
@@ -267,7 +269,12 @@ export default function App() {
 
           <div className="chart-wrap">
             {mode === "cumulative" ? (
-              <WormChart data={chartData} player={player} showPaths={showPaths} />
+              <WormChart
+                data={chartData}
+                player={player}
+                showPaths={showPaths}
+                height={narrow ? 320 : 520}
+              />
             ) : (
               <RoundVotes player={player} rounds={data.rounds} />
             )}
@@ -326,38 +333,40 @@ export default function App() {
             rounds={data.rounds}
             selectedId={player.id}
             onSelect={setSelectedId}
-            height={440}
+            height={narrow ? 300 : 440}
           />
-          <table className="race-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Player</th>
-                <th>Expected</th>
-                <th>90% range</th>
-                <th>P(first or joint)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.slice(0, 10).map((entry, index) => (
-                <tr
-                  key={entry.id}
-                  className={entry.id === player.id ? "active" : ""}
-                  onClick={() => setSelectedId(entry.id)}
-                >
-                  <td>{index + 1}</td>
-                  <td>
-                    <TeamLogo team={entry.team} size={16} /> {entry.name}
-                  </td>
-                  <td>{Number(entry.expectedVotes ?? 0).toFixed(1)}</td>
-                  <td>
-                    {entry.q05}–{entry.q95}
-                  </td>
-                  <td>{pct(entry.pFirstOrJoint)}</td>
+          <div className="table-scroll">
+            <table className="race-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Player</th>
+                  <th>Expected</th>
+                  <th>90% range</th>
+                  <th>P(first or joint)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {players.slice(0, 10).map((entry, index) => (
+                  <tr
+                    key={entry.id}
+                    className={entry.id === player.id ? "active" : ""}
+                    onClick={() => setSelectedId(entry.id)}
+                  >
+                    <td>{index + 1}</td>
+                    <td>
+                      <TeamLogo team={entry.team} size={16} /> {entry.name}
+                    </td>
+                    <td>{Number(entry.expectedVotes ?? 0).toFixed(1)}</td>
+                    <td>
+                      {entry.q05}–{entry.q95}
+                    </td>
+                    <td>{pct(entry.pFirstOrJoint)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
