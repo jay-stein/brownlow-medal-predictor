@@ -25,9 +25,6 @@ from . import (
     simulate,
     validation,
 )
-from . import (
-    reports as reports_mod,
-)
 
 
 def run_audit() -> None:
