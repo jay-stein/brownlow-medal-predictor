@@ -8,7 +8,19 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import evaluate, features, folds, history, ingest, model, paths, scores, simulate, validation
+from . import (
+    eligibility,
+    evaluate,
+    features,
+    folds,
+    history,
+    ingest,
+    model,
+    paths,
+    scores,
+    simulate,
+    validation,
+)
 
 
 def run_audit() -> None:
@@ -302,6 +314,29 @@ def run_rolling_backtest(args: argparse.Namespace) -> None:
         report_seasons=parse_seasons(args.report_seasons),
         min_evidence=args.min_evidence,
     )
+    scores_by_season = _load_cached_scores(args.model)
+    if not table.empty:
+        for index, row in table.iterrows():
+            season = int(row["season"])
+            frame = scores_by_season.get(season)
+            if frame is None:
+                continue
+            ineligible = eligibility.ineligible_ids(season)
+            simulation = simulate.simulate_season(
+                frame,
+                float(row["tau_selected"]),
+                effect_scale=float(row["scale_selected"]),
+                n_sims=args.n_sims,
+                seed=args.seed,
+                ineligible=ineligible,
+            )
+            metrics = simulate.season_metrics(
+                simulation, contender_count=args.contenders, ineligible=ineligible
+            )
+            table.loc[index, "favorite_won"] = metrics["favorite_won"]
+            table.loc[index, "winner_probability"] = metrics["winner_probability"]
+            table.loc[index, "winner_mean_rank"] = metrics["winner_mean_rank"]
+            table.loc[index, "n_ineligible"] = len(ineligible)
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"rolling_backtest_{args.model}.csv"
@@ -459,6 +494,36 @@ def run_forecast(args: argparse.Namespace) -> None:
     else:
         effect_scale = 0.0
 
+    player_effect_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"player_effect_selection_{model_key}.json"
+    )
+    player_effect = None
+    if player_effect_path.exists():
+        player_effect = json.loads(player_effect_path.read_text())
+        prior = {
+            candidate: scores.load_scores(candidate, model_key).frame
+            for candidate in scores.cached_seasons(model_key)
+            if candidate < season
+        }
+        residual_history = history.player_residual_history(prior, tau)
+        frame = history.attach_player_effects(
+            frame,
+            residual_history,
+            season,
+            shrinkage=float(player_effect["shrinkage"]),
+            mapping=float(player_effect["mapping"]),
+            half_life=float(player_effect["half_life"]),
+        )
+        print(
+            f"  player effects: shrinkage={player_effect['shrinkage']} "
+            f"mapping={player_effect['mapping']} half_life={player_effect['half_life']} "
+            f"({len(residual_history)} prior player-seasons)"
+        )
+
+    ineligible = eligibility.ineligible_ids(season)
+    if ineligible:
+        print(f"  eligibility: {len(ineligible)} suspended players excluded from the medal")
+
     simulation = simulate.simulate_season(
         frame,
         tau,
@@ -467,6 +532,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         seed=args.seed,
         track_rounds=args.web_json is not None,
         path_count=args.web_paths,
+        ineligible=ineligible,
     )
     players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
 
@@ -476,7 +542,12 @@ def run_forecast(args: argparse.Namespace) -> None:
         parts = []
         for scale in scales:
             scenario = simulate.simulate_season(
-                frame, tau, effect_scale=scale, n_sims=args.n_sims, seed=args.seed
+                frame,
+                tau,
+                effect_scale=scale,
+                n_sims=args.n_sims,
+                seed=args.seed,
+                ineligible=ineligible,
             )
             subset = scenario.players[
                 [
@@ -554,6 +625,8 @@ def run_forecast(args: argparse.Namespace) -> None:
                 "tauMatches": tau_matches,
                 "tauSource": tau_source,
                 "effectScale": effect_scale,
+                "playerEffect": player_effect,
+                "nIneligible": len(ineligible),
                 "nSims": args.n_sims,
                 "generated": pd.Timestamp.now().strftime("%Y-%m-%d"),
                 "sensitivityScales": scales,
@@ -621,6 +694,9 @@ def main() -> None:
     )
     rolling.add_argument("--report-seasons", default="2018-2025")
     rolling.add_argument("--min-evidence", type=int, default=3)
+    rolling.add_argument("--n-sims", type=int, default=2000)
+    rolling.add_argument("--contenders", type=int, default=15)
+    rolling.add_argument("--seed", type=int, default=42)
     rolling.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
 
     player_effects = subparsers.add_parser(

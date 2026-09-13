@@ -126,10 +126,21 @@ def simulate_season(
     seed: int = 42,
     track_rounds: bool = False,
     path_count: int = DEFAULT_PATH_COUNT,
+    ineligible: set[str] | None = None,
 ) -> SeasonSimulation:
-    """Simulate one season's count with a persistent player-season effect."""
+    """Simulate one season's count with a persistent player-season effect.
+
+    ``ineligible`` lists player ids suspended during the season: they keep
+    their simulated votes but award probabilities are computed among eligible
+    players only, matching the medal's fairest-and-best rule.
+    """
     players, matches = prepare_season(frame)
     n_players = len(players)
+    if ineligible:
+        player_ids = players[PLAYER_COLUMN].astype(str).to_numpy()
+        eligible = ~np.isin(player_ids, list(ineligible))
+    else:
+        eligible = np.ones(n_players, dtype=bool)
     rng = np.random.default_rng(seed)
     if effect_scale > 0:
         effects = rng.normal(0.0, effect_scale, size=(n_players, n_sims))
@@ -194,9 +205,11 @@ def simulate_season(
     summary["sim_median"] = np.median(totals, axis=1)
     for quantile in QUANTILES:
         summary[f"sim_q{int(quantile * 100):02d}"] = np.quantile(totals, quantile, axis=1)
-    leaders = totals == totals.max(axis=0, keepdims=True)
+    award_totals = np.where(eligible[:, None], totals, -1) if ineligible else totals
+    leaders = award_totals == award_totals.max(axis=0, keepdims=True)
     summary["p_outright_first"] = (leaders & (leaders.sum(axis=0, keepdims=True) == 1)).mean(axis=1)
     summary["p_first_or_joint"] = leaders.mean(axis=1)
+    summary["ineligible"] = ~eligible
     top_rank = min(5, totals.shape[0])
     top5_threshold = np.sort(totals, axis=0)[-top_rank, :]
     summary["p_top5"] = (totals >= top5_threshold[None, :]).mean(axis=1)
@@ -294,6 +307,7 @@ def forecast_export(
                 "pOutright": _rounded(row.get("p_outright_first"), 4),
                 "pFirstOrJoint": _rounded(row.get("p_first_or_joint"), 4),
                 "pTop5": _rounded(row.get("p_top5"), 4),
+                "ineligible": bool(row.get("ineligible", False)),
                 "winLow": _rounded(row.get("p_first_or_joint_min"), 4),
                 "winHigh": _rounded(row.get("p_first_or_joint_max"), 4),
                 "rounds": {
@@ -334,12 +348,14 @@ def forecast_export(
 def season_metrics(
     simulation: SeasonSimulation,
     contender_count: int = DEFAULT_CONTENDERS,
+    ineligible: set[str] | None = None,
 ) -> dict:
     """CRPS, interval coverage and award outcomes for season vote totals.
 
     Contenders are the ``contender_count`` players with the highest simulated
     mean, a definition that is available at forecast time; no hindsight from
-    the observed leaderboard enters the mask.
+    the observed leaderboard enters the mask. ``ineligible`` removes suspended
+    players from the favourite/winner determination but not from the votes.
     """
     totals = simulation.totals
     observed = simulation.players["observed_votes"].to_numpy(dtype=float)
@@ -374,10 +390,20 @@ def season_metrics(
             result[f"width_{label}{suffix}"] = float(np.mean([pair[1] for pair in pairs]))
 
     if labelled.any():
-        observed_max = float(np.nanmax(observed))
-        joint_winners = set(np.flatnonzero(labelled & (observed == observed_max)).tolist())
-        favorite = int(np.argmax(mean_votes))
-        winner = int(np.nanargmax(observed))
+        n_players = len(observed)
+        if ineligible:
+            player_ids = simulation.players[PLAYER_COLUMN].astype(str).to_numpy()
+            eligible = ~np.isin(player_ids, list(ineligible))
+        else:
+            eligible = np.ones(n_players, dtype=bool)
+        eligible_mean = np.where(eligible, mean_votes, -np.inf)
+        favorite = int(np.argmax(eligible_mean))
+        observed_eligible = labelled & eligible
+        observed_max = float(np.nanmax(np.where(observed_eligible, observed, np.nan)))
+        joint_winners = set(
+            np.flatnonzero(observed_eligible & (observed == observed_max)).tolist()
+        )
+        winner = int(np.nanargmax(np.where(observed_eligible, observed, np.nan)))
         result["favorite_won"] = bool(favorite in joint_winners)
         result["favorite_probability"] = float(simulation.players["p_first_or_joint"].iloc[favorite])
         result["winner_probability"] = float(simulation.players["p_first_or_joint"].iloc[winner])
