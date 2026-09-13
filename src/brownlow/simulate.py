@@ -32,6 +32,7 @@ QUANTILES = (0.05, 0.25, 0.75, 0.95)
 ROUND_QUANTILES = (0.05, 0.25, 0.50, 0.75, 0.95)
 DEFAULT_CONTENDERS = 15
 DEFAULT_PATH_COUNT = 50
+TRIPLE_CANDIDATES = 40
 
 
 @dataclass
@@ -50,14 +51,33 @@ class SeasonSimulation:
     round_p1: np.ndarray | None = None
     round_p2: np.ndarray | None = None
     round_p3: np.ndarray | None = None
+    match_groups: list[MatchGroup] | None = None
+    match_slot_counts: list[np.ndarray] | None = None
+    match_triple_counts: list[dict[int, int]] | None = None
+    player_count: int | None = None
 
 
 @dataclass
 class MatchGroup:
+    match_id: str
     round_number: int
     indices: np.ndarray
     utilities: np.ndarray
     triple: tuple[int, int, int] | None
+    home_team: str | None = None
+    away_team: str | None = None
+    home_score: float | None = None
+    away_score: float | None = None
+    game_date: str | None = None
+
+
+def _first_value(group: pd.DataFrame, column: str):
+    if column not in group.columns:
+        return None
+    value = group[column].iloc[0]
+    if pd.isna(value):
+        return None
+    return value
 
 
 def prepare_season(
@@ -83,7 +103,7 @@ def prepare_season(
 
     positions = {key: index for index, key in enumerate(players[PLAYER_COLUMN])}
     matches: list[MatchGroup] = []
-    for _, group in work.groupby(MATCH_COLUMN, sort=False):
+    for match_id, group in work.groupby(MATCH_COLUMN, sort=False):
         indices = np.array([positions[key] for key in group["PLAYER_KEY"]], dtype=int)
         utilities = group[UTILITY_COLUMN].to_numpy(dtype=float)
         round_number = int(group[ROUND_COLUMN].iloc[0])
@@ -93,7 +113,20 @@ def prepare_season(
         if len(recipients) == 3 and sorted(votes[recipients].tolist()) == [1.0, 2.0, 3.0]:
             order = recipients[np.argsort(-votes[recipients], kind="stable")]
             triple = tuple(int(index) for index in order)
-        matches.append(MatchGroup(round_number, indices, utilities, triple))
+        matches.append(
+            MatchGroup(
+                match_id=str(match_id),
+                round_number=round_number,
+                indices=indices,
+                utilities=utilities,
+                triple=triple,
+                home_team=_first_value(group, "HOME_TEAM_NAME"),
+                away_team=_first_value(group, "AWAY_TEAM_NAME"),
+                home_score=_first_value(group, "HOMETEAMSCORE_MATCHSCORE_TOTALSCORE"),
+                away_score=_first_value(group, "AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE"),
+                game_date=_first_value(group, "GAME_DATE"),
+            )
+        )
     return players, matches
 
 
@@ -105,8 +138,13 @@ def _allocate_match(
     tau: float,
     totals: np.ndarray,
     n_sims: int,
+    picks_out: list[np.ndarray] | None = None,
 ) -> None:
-    """Draw one ordered 3-2-1 allocation per simulation and add to ``totals``."""
+    """Draw one ordered 3-2-1 allocation per simulation and add to ``totals``.
+
+    When ``picks_out`` is supplied, the local player positions chosen for each
+    vote slot are appended to it.
+    """
     scores = utilities[:, None] + effects[indices]
     weights = np.exp((scores - scores.max(axis=0, keepdims=True)) / tau)
     simulation_index = np.arange(n_sims)
@@ -115,6 +153,8 @@ def _allocate_match(
         draws = rng.random(n_sims) * cumulative[-1]
         picks = (cumulative < draws).sum(axis=0)
         np.add.at(totals, (indices[picks], simulation_index), points)
+        if picks_out is not None:
+            picks_out.append(picks)
         weights[picks, simulation_index] = 0.0
 
 
@@ -151,6 +191,21 @@ def eligible_mask(players: pd.DataFrame, ineligible: set[str] | None) -> np.ndar
     return ~np.isin(player_ids, list(ineligible))
 
 
+def _record_match(
+    slot_counts: np.ndarray,
+    triple_counts: dict[int, int],
+    picks: list[np.ndarray],
+    n_players: int,
+) -> None:
+    """Accumulate per-player slot counts and the top ordered triples."""
+    for slot in range(3):
+        np.add.at(slot_counts, (picks[slot], slot), 1)
+    encoded = (picks[0].astype(np.int64) * n_players + picks[1]) * n_players + picks[2]
+    values, counts = np.unique(encoded, return_counts=True)
+    for index in np.argsort(-counts)[:TRIPLE_CANDIDATES]:
+        triple_counts[int(values[index])] = int(counts[index])
+
+
 def simulate_season(
     frame: pd.DataFrame,
     tau: float,
@@ -160,6 +215,7 @@ def simulate_season(
     track_rounds: bool = False,
     path_count: int = DEFAULT_PATH_COUNT,
     ineligible: set[str] | None = None,
+    track_matches: bool = False,
 ) -> SeasonSimulation:
     """Simulate one season's count with a persistent player-season effect.
 
@@ -185,6 +241,17 @@ def simulate_season(
     round_p1 = None
     round_p2 = None
     round_p3 = None
+    match_groups = None
+    match_slot_counts = None
+    match_triple_counts = None
+    player_count = None
+    match_index_of: dict[str, int] = {}
+    if track_matches:
+        match_groups = matches
+        match_slot_counts = [np.zeros((len(match.indices), 3), dtype=np.int64) for match in matches]
+        match_triple_counts = [{} for _ in matches]
+        player_count = n_players
+        match_index_of = {match.match_id: index for index, match in enumerate(matches)}
 
     if track_rounds:
         rounds = sorted({match.round_number for match in matches})
@@ -208,7 +275,22 @@ def simulate_season(
         for round_index, round_number in enumerate(rounds):
             while pointer < len(ordered) and ordered[pointer].round_number == round_number:
                 match = ordered[pointer]
-                _allocate_match(rng, match.indices, match.utilities, effects, tau, totals, n_sims)
+                picks: list[np.ndarray] = []
+                _allocate_match(
+                    rng,
+                    match.indices,
+                    match.utilities,
+                    effects,
+                    tau,
+                    totals,
+                    n_sims,
+                    picks_out=picks,
+                )
+                if track_matches:
+                    index = match_index_of[match.match_id]
+                    _record_match(
+                        match_slot_counts[index], match_triple_counts[index], picks, n_players
+                    )
                 pointer += 1
             path_totals[:, round_index, :] = totals[:, path_index]
             cumulative_mean[:, round_index] = totals.mean(axis=1)
@@ -226,8 +308,20 @@ def simulate_season(
             previous[:] = totals
     else:
         totals = np.zeros((n_players, n_sims), dtype=np.int32)
-        for match in matches:
-            _allocate_match(rng, match.indices, match.utilities, effects, tau, totals, n_sims)
+        for index, match in enumerate(matches):
+            picks = []
+            _allocate_match(
+                rng,
+                match.indices,
+                match.utilities,
+                effects,
+                tau,
+                totals,
+                n_sims,
+                picks_out=picks,
+            )
+            if track_matches:
+                _record_match(match_slot_counts[index], match_triple_counts[index], picks, n_players)
 
     summary = summarise_totals(players, totals, eligible)
     top_rank = min(5, totals.shape[0])
@@ -249,6 +343,10 @@ def simulate_season(
         round_p1=round_p1,
         round_p2=round_p2,
         round_p3=round_p3,
+        match_groups=match_groups,
+        match_slot_counts=match_slot_counts,
+        match_triple_counts=match_triple_counts,
+        player_count=player_count,
     )
 
 
@@ -297,6 +395,7 @@ def forecast_export(
     *,
     top: int = 50,
     metadata: dict | None = None,
+    reports: dict[str, dict] | None = None,
 ) -> dict:
     """Build a compact JSON-ready payload for the interactive web visualisation."""
     if simulation.rounds is None or simulation.cumulative_quantiles is None:
@@ -354,6 +453,85 @@ def forecast_export(
             }
         )
 
+    n_sims = simulation.totals.shape[1]
+    team_payload = []
+    for team, group in simulation.players.groupby("TEAM_NAME"):
+        positions = group.index.to_numpy()
+        team_totals = simulation.totals[positions].sum(axis=0)
+        top_players = group.sort_values("sim_mean", ascending=False).head(4)
+        team_payload.append(
+            {
+                "name": str(team),
+                "expected": _rounded(team_totals.mean()),
+                "q05": _rounded(np.quantile(team_totals, 0.05)),
+                "q95": _rounded(np.quantile(team_totals, 0.95)),
+                "nPlayers": len(group),
+                "players": [
+                    {
+                        "id": str(row[PLAYER_COLUMN]),
+                        "name": str(row["FULL_NAME"]).title(),
+                        "expected": _rounded(row["sim_mean"]),
+                    }
+                    for _, row in top_players.iterrows()
+                ],
+            }
+        )
+    team_payload.sort(key=lambda row: row["expected"], reverse=True)
+
+    match_payload = []
+    if (
+        simulation.match_groups is not None
+        and simulation.match_slot_counts is not None
+        and simulation.match_triple_counts is not None
+        and simulation.player_count
+    ):
+        point_values = np.array([3.0, 2.0, 1.0])
+        for index, match in enumerate(simulation.match_groups):
+            counts = simulation.match_slot_counts[index]
+            probabilities = counts / n_sims
+            expected_points = probabilities @ point_values
+            leaders = np.argsort(-expected_points)[:8]
+            vote_rows = []
+            for local in leaders:
+                row = simulation.players.iloc[match.indices[local]]
+                vote_rows.append(
+                    {
+                        "id": str(row[PLAYER_COLUMN]),
+                        "name": str(row["FULL_NAME"]).title(),
+                        "team": str(row["TEAM_NAME"]),
+                        "p3": _rounded(probabilities[local, 0], 4),
+                        "p2": _rounded(probabilities[local, 1], 4),
+                        "p1": _rounded(probabilities[local, 2], 4),
+                    }
+                )
+            triples = sorted(
+                simulation.match_triple_counts[index].items(), key=lambda item: -item[1]
+            )[:3]
+            triple_rows = []
+            for encoded, count in triples:
+                third = encoded % simulation.player_count
+                second = (encoded // simulation.player_count) % simulation.player_count
+                first = encoded // (simulation.player_count**2)
+                names = [
+                    str(simulation.players.iloc[match.indices[local]]["FULL_NAME"]).title()
+                    for local in (first, second, third)
+                ]
+                triple_rows.append({"players": names, "p": _rounded(count / n_sims, 4)})
+            record = {
+                "id": match.match_id,
+                "round": int(match.round_number),
+                "date": str(match.game_date) if match.game_date is not None else None,
+                "home": match.home_team,
+                "away": match.away_team,
+                "homeScore": int(match.home_score) if match.home_score is not None else None,
+                "awayScore": int(match.away_score) if match.away_score is not None else None,
+                "votes": vote_rows,
+                "triples": triple_rows,
+            }
+            if reports and match.match_id in reports:
+                record["report"] = reports[match.match_id]
+            match_payload.append(record)
+
     return {
         "season": simulation.season,
         "meta": metadata or {},
@@ -362,6 +540,8 @@ def forecast_export(
             for number in simulation.rounds
         ],
         "players": exported_players,
+        "teams": team_payload,
+        "matches": match_payload,
     }
 
 

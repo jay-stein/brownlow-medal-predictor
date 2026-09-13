@@ -169,3 +169,48 @@ def test_forecast_export_payload_shapes():
     assert len(leader["rounds"]["paths"][0]) == 2
     assert len(leader["rounds"]["p3"]) == 2
     assert leader["pFirstOrJoint"] == max(player["pFirstOrJoint"] for player in payload["players"])
+    assert len(payload["teams"]) == 1
+    assert payload["matches"] == []
+
+
+def test_match_tracking_records_slots_and_triples():
+    simulation = simulate.simulate_season(
+        _multi_round_frame(), tau=1.0, n_sims=200, seed=8, track_matches=True
+    )
+    assert simulation.match_groups is not None
+    assert len(simulation.match_groups) == 2
+    for counts in simulation.match_slot_counts:
+        assert counts.sum() == 200 * 3
+    for triples in simulation.match_triple_counts:
+        assert sum(triples.values()) <= 200
+        assert max(triples.values()) > 0
+
+
+def test_forecast_export_includes_matches_and_reports():
+    simulation = simulate.simulate_season(
+        _multi_round_frame(),
+        tau=1.0,
+        n_sims=200,
+        seed=11,
+        track_rounds=True,
+        track_matches=True,
+        path_count=10,
+    )
+    players = simulation.players.sort_values("sim_mean", ascending=False)
+    payload = simulate.forecast_export(
+        simulation,
+        players,
+        top=4,
+        metadata={"season": 2024},
+        reports={"m1": {"source": "test", "text": "A classic."}},
+    )
+    assert len(payload["matches"]) == 2
+    match = payload["matches"][0]
+    assert match["id"] == "m1"
+    assert {"home", "away", "votes", "triples"} <= set(match)
+    assert len(match["votes"]) == 4
+    assert match["triples"][0]["p"] > 0
+    assert match["report"]["text"] == "A classic."
+    team = payload["teams"][0]
+    assert team["expected"] > 0
+    assert len(team["players"]) == 4

@@ -719,6 +719,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         track_rounds=args.web_json is not None,
         path_count=args.web_paths,
         ineligible=ineligible,
+        track_matches=args.web_json is not None,
     )
     players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
 
@@ -800,10 +801,13 @@ def run_forecast(args: argparse.Namespace) -> None:
     print(f"\nWrote {output_dir / f'forecast_{season}_{model_key}.csv'}")
 
     if args.web_json is not None:
+        reports_path = paths.DATA_DIR / f"match_reports_{season}.json"
+        reports = json.loads(reports_path.read_text()) if reports_path.exists() else None
         payload = simulate.forecast_export(
             simulation,
             players,
             top=args.web_players,
+            reports=reports,
             metadata={
                 "season": season,
                 "model": model_key,
