@@ -81,5 +81,5 @@ def test_rolling_ensemble_uses_only_earlier_seasons():
     table = ensemble.rolling_ensemble(grid, report_seasons=[2021], min_evidence=1)
     assert list(table["season"]) == [2021]
     # Member b wins the 2020 evidence and is applied to 2021.
-    assert table.iloc[0]["weights_selected"] == "b"
+    assert table.iloc[0]["weights_selected"] == "b:1"
     assert table.iloc[0]["mean_crps_contenders"] == 2.0

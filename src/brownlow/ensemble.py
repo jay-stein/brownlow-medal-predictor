@@ -235,7 +235,7 @@ def rolling_ensemble(
             continue
         record = match.iloc[0].to_dict()
         selected_weights = ",".join(
-            f"{column[2:]}:{best[column]:g}" for column in weight_columns
+            f"{column[2:]}:{best[column]:g}" for column in weight_columns if best[column] > 0.0
         )
         record.update(
             {

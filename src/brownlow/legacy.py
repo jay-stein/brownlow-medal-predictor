@@ -102,7 +102,7 @@ def train_legacy_ensemble(
 
     rng = np.random.default_rng(seed)
     columns = list(X_train.columns)
-    k_features = max(1, int(round(feature_fraction * len(columns))))
+    k_features = max(1, round(feature_fraction * len(columns)))
     params = {**model.REGRESSION_PARAMS, "device": model.default_device()}
     predictions = []
     for index in range(n_models):
