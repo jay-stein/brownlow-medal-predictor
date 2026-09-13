@@ -7,6 +7,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import TeamLogo from "./TeamLogo.jsx";
 import { teamColor } from "./teams.js";
 
 function RaceTooltip({ active, payload, label, players }) {
@@ -73,7 +74,7 @@ export default function TopWorms({ players, rounds, selectedId, onSelect }) {
             className={player.id === selectedId ? "active" : ""}
             onClick={() => onSelect(player.id)}
           >
-            <span className="dot" style={{ background: teamColor(player.team) }} />
+            <TeamLogo team={player.team} size={16} />
             {player.name}
             <small>{Number(player.expectedVotes ?? 0).toFixed(1)}</small>
           </button>

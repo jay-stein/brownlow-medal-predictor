@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import MatchesView from "./MatchesView.jsx";
 import RoundVotes from "./RoundVotes.jsx";
+import TeamLogo from "./TeamLogo.jsx";
 import TeamsView from "./TeamsView.jsx";
 import TopWorms from "./TopWorms.jsx";
 import WormChart from "./WormChart.jsx";
@@ -95,9 +96,11 @@ export default function App() {
         <div className="chips">
           <span>
             Model:{" "}
-            {meta.model === "ranking_coaches"
-              ? "LambdaMART + coaches' votes"
-              : meta.model ?? "ranking"}
+            {meta.model === "ranking_season"
+              ? "LambdaMART + coaches' votes + season form"
+              : meta.model === "ranking_coaches"
+                ? "LambdaMART + coaches' votes"
+                : meta.model ?? "ranking"}
           </span>
           <span>τ = {meta.tau ?? "—"}</span>
           <span>Effect scale = {meta.effectScale ?? "—"}</span>
@@ -153,7 +156,7 @@ export default function App() {
                   onClick={() => setSelectedId(entry.id)}
                 >
                   <span className="rank">{rank}</span>
-                  <span className="dot" style={{ background: teamColor(entry.team) }} />
+                  <TeamLogo team={entry.team} size={22} />
                   <span className="who">
                     <span className="name">
                       {entry.name}
@@ -313,13 +316,13 @@ export default function App() {
 
       <footer className="footnote">
         <p>
-          Method: match-grouped LambdaMART scores trained on 2012–2025 votes, using match statistics
-          and the AFL Coaches Association's per-match panel votes as features; Plackett–Luce
-          allocation with temperature τ and persistent-effect scale σ calibrated jointly on
-          effect-integrated match likelihood and contender CRPS ({meta.tauSource ?? "prior seasons"});
-          historical player effects are shrunken residuals from prior seasons. Rolling 2018–2025
-          backtest: contender CRPS of 2.85, 90% interval coverage of 88%, and the model favourite
-          won 2 of the 5 most recent counts.
+          Method: match-grouped LambdaMART scores trained on 2012–2025 votes, using match statistics,
+          the AFL Coaches Association's per-match panel votes and leave-one-game-out season form as
+          features; Plackett–Luce allocation with temperature τ and persistent-effect scale σ
+          calibrated jointly on effect-integrated match likelihood and contender CRPS
+          ({meta.tauSource ?? "prior seasons"}); historical player effects are shrunken residuals
+          from prior seasons. Rolling 2021–2025 backtest: contender CRPS of 2.62, 90% interval
+          coverage of 92%, and the model favourite won 2 of the 5 counts.
         </p>
         <p>
           Post-round-24 conditional forecast: 2026 match statistics and coaches' votes are observed,

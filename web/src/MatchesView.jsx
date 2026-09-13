@@ -1,9 +1,25 @@
 import { useMemo, useState } from "react";
+import TeamLogo from "./TeamLogo.jsx";
 import { teamColor } from "./teams.js";
 
 function pct(value, digits = 0) {
   if (value === null || value === undefined) return "—";
   return `${(value * 100).toFixed(digits)}%`;
+}
+
+function ProbCell({ value, boost = 1 }) {
+  const probability = value ?? 0;
+  const alpha = Math.min(0.3, 0.04 + probability * 0.22 * boost);
+  return (
+    <span
+      className="prob-cell"
+      style={{ background: `rgba(212, 175, 55, ${alpha.toFixed(3)})` }}
+      title={`${pct(probability, 1)} probability`}
+    >
+      <i style={{ width: `${Math.min(100, probability * 100)}%` }} />
+      <em>{pct(probability)}</em>
+    </span>
+  );
 }
 
 function formatDate(value) {
@@ -51,11 +67,17 @@ function MatchCard({ match }) {
         </span>
       </header>
       <h3 className="match-score">
-        <span className={homeWon ? "winner" : ""}>{match.home}</span>
+        <span className={homeWon ? "winner" : ""}>
+          <TeamLogo team={match.home} size={18} />
+          {match.home}
+        </span>
         <b>
           {match.homeScore ?? "—"}–{match.awayScore ?? "—"}
         </b>
-        <span className={!homeWon ? "winner" : ""}>{match.away}</span>
+        <span className={!homeWon ? "winner" : ""}>
+          {match.away}
+          <TeamLogo team={match.away} size={18} />
+        </span>
       </h3>
       {summarise(match) ? <p className="match-summary">{summarise(match)}</p> : null}
       {match.report ? (
@@ -75,9 +97,9 @@ function MatchCard({ match }) {
       <div className="vote-table">
         <div className="vote-head">
           <span>Player</span>
-          <span>3</span>
-          <span>2</span>
-          <span>1</span>
+          <span title="Probability of receiving 3 votes">3</span>
+          <span title="Probability of receiving 2 votes">2</span>
+          <span title="Probability of receiving 1 vote">1</span>
           <span>Game</span>
         </div>
         {(match.votes ?? []).slice(0, 4).map((vote) => (
@@ -89,9 +111,9 @@ function MatchCard({ match }) {
               <i className="dot" style={{ background: teamColor(vote.team) }} />
               {vote.name}
             </span>
-            <span>{pct(vote.p3)}</span>
-            <span>{pct(vote.p2)}</span>
-            <span>{pct(vote.p1)}</span>
+            <ProbCell value={vote.p3} boost={1.15} />
+            <ProbCell value={vote.p2} />
+            <ProbCell value={vote.p1} boost={0.85} />
             <span className="vote-stats">
               {vote.disposals != null ? `${vote.disposals}d` : "—"}
               {vote.goals ? ` ${vote.goals}g` : ""}
@@ -128,6 +150,10 @@ export default function MatchesView({ matches, rounds }) {
           predicted 3-2-1 probabilities, scoreline and the standout players for every game
         </span>
       </div>
+      <p className="stat-legend">
+        <b>Game</b>: d = disposals · g = goals · cv = coaches' votes. <b>3 / 2 / 1</b> are the
+        model's probabilities for that vote — darker cells and longer bars mean more likely.
+      </p>
       <div className="round-switcher">
         {available.map((round) => (
           <button
