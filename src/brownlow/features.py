@@ -111,16 +111,75 @@ FEATURE_LIST = (
     + [f"{col}_prop" for col in PROPORTION_FEATURES]
 )
 
-CATEGORICAL_FEATURES = [POSITION_FEATURE, "PLAYERTEAM_OUTCOME"]
+CATEGORICAL_FEATURES = [POSITION_FEATURE, "PLAYERTEAM_OUTCOME", "VENUE_STATE"]
 
 TEAM_COLS_TO_KEEP = [
     "MATCHID",
     "ROUND_YEAR",
+    "VENUE_STATE",
     "HOMETEAMSCORE_MINUTESINFRONT",
     "AWAYTEAMSCORE_MINUTESINFRONT",
     "HOMETEAMSCORE_MATCHSCORE_TOTALSCORE",
     "AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE",
 ]
+
+PLAYER_ID = "PLAYER_PLAYER_PLAYER_PLAYERID"
+
+# Home state per club, used to flag interstate travel to the venue.
+CLUB_STATES = {
+    "Adelaide Crows": "SA",
+    "Brisbane Lions": "QLD",
+    "Carlton": "VIC",
+    "Collingwood": "VIC",
+    "Essendon": "VIC",
+    "Fremantle": "WA",
+    "Geelong Cats": "VIC",
+    "Gold Coast SUNS": "QLD",
+    "GWS GIANTS": "NSW",
+    "Hawthorn": "VIC",
+    "Melbourne": "VIC",
+    "North Melbourne": "VIC",
+    "Port Adelaide": "SA",
+    "Richmond": "VIC",
+    "St Kilda": "VIC",
+    "Sydney Swans": "NSW",
+    "West Coast Eagles": "WA",
+    "Western Bulldogs": "VIC",
+}
+
+# Match context features derived from the results we already have.
+CONTEXT_FEATURES = [
+    "ABS_MARGIN",
+    "CLOSE_FINISH",
+    "OWN_ELO",
+    "OPPONENT_ELO",
+    "ELO_DIFF",
+    "INTERSTATE",
+    "VENUE_STATE",
+]
+
+# Leave-one-game-out season aggregates (post-season information boundary).
+SEASON_AGGREGATE_SOURCES = [
+    "DISPOSALS",
+    "KICKS",
+    "HANDBALLS",
+    "MARKS",
+    "TACKLES",
+    "GOALS",
+    "RATINGPOINTS",
+    "COACH_VOTES",
+]
+
+SEASON_AGGREGATE_FEATURES = [
+    "SEASON_GAMES",
+    "SEASON_TEAM_WIN_RATE",
+    "SEASON_COACH_VOTES_TOTAL",
+    "SEASON_COACH_VOTES_RANK",
+    "SEASON_COACH_VOTE_RATE",
+    *[f"SEASON_{column}_PG" for column in SEASON_AGGREGATE_SOURCES],
+]
+
+FORM_FEATURES = CONTEXT_FEATURES + SEASON_AGGREGATE_FEATURES
 
 
 def normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -225,6 +284,141 @@ def add_height_features(df: pd.DataFrame, player_details: pd.DataFrame) -> pd.Da
     return out.drop(columns=["SEASON_KEY", "POSITION_GROUP"])
 
 
+def compute_team_elo(
+    team_stats: pd.DataFrame,
+    k: float = 20.0,
+    home_advantage: float = 35.0,
+    initial: float = 1500.0,
+    regression: float = 0.25,
+) -> pd.DataFrame:
+    """Pre-match Elo ratings for every match, from our own results.
+
+    Ratings run chronologically with a small regression to the mean between
+    seasons. Only pre-match values are recorded, so a row's features depend
+    only on earlier results.
+    """
+    teams = normalise_columns(team_stats)
+    columns = [
+        "MATCHID",
+        "MATCH_DATE",
+        "SEASON",
+        "MATCH_HOMETEAM_NAME",
+        "MATCH_AWAYTEAM_NAME",
+        "HOMETEAMSCORE_MATCHSCORE_TOTALSCORE",
+        "AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE",
+    ]
+    matches = teams[columns].drop_duplicates("MATCHID").copy()
+    matches["MATCH_DATE"] = pd.to_datetime(matches["MATCH_DATE"], errors="coerce")
+    matches = matches.dropna(
+        subset=[
+            "MATCH_DATE",
+            "HOMETEAMSCORE_MATCHSCORE_TOTALSCORE",
+            "AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE",
+        ]
+    )
+    matches["SEASON"] = (
+        pd.to_numeric(matches["SEASON"], errors="coerce")
+        .fillna(matches["MATCH_DATE"].dt.year)
+        .astype(int)
+    )
+    matches = matches.sort_values(["MATCH_DATE", "MATCHID"])
+
+    ratings: dict[str, float] = {}
+    home_ratings: list[float] = []
+    away_ratings: list[float] = []
+    previous_season: int | None = None
+    for row in matches.itertuples(index=False):
+        if previous_season is not None and row.SEASON != previous_season:
+            for team in list(ratings):
+                ratings[team] = initial + (ratings[team] - initial) * (1.0 - regression)
+        previous_season = row.SEASON
+        home, away = row.MATCH_HOMETEAM_NAME, row.MATCH_AWAYTEAM_NAME
+        rating_home = ratings.get(home, initial)
+        rating_away = ratings.get(away, initial)
+        home_ratings.append(rating_home)
+        away_ratings.append(rating_away)
+        expected = 1.0 / (1.0 + 10 ** (-(rating_home + home_advantage - rating_away) / 400.0))
+        if row.HOMETEAMSCORE_MATCHSCORE_TOTALSCORE > row.AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE:
+            actual = 1.0
+        elif row.HOMETEAMSCORE_MATCHSCORE_TOTALSCORE < row.AWAYTEAMSCORE_MATCHSCORE_TOTALSCORE:
+            actual = 0.0
+        else:
+            actual = 0.5
+        delta = k * (actual - expected)
+        ratings[home] = rating_home + delta
+        ratings[away] = rating_away - delta
+
+    lookup = matches[["MATCHID"]].reset_index(drop=True)
+    lookup["HOME_ELO"] = home_ratings
+    lookup["AWAY_ELO"] = away_ratings
+    return lookup
+
+
+def add_match_context(df: pd.DataFrame, team_stats: pd.DataFrame) -> pd.DataFrame:
+    """Close-game, opponent-strength and travel features from existing results."""
+    out = df.copy()
+    out["ABS_MARGIN"] = out["PLAYERTEAM_MARGIN"].abs()
+    out["CLOSE_FINISH"] = (out["ABS_MARGIN"] <= 12).astype(int)
+
+    elo = compute_team_elo(team_stats)
+    out = out.merge(elo, on="MATCHID", how="left")
+    at_home = out["AT_HOME"] == 1
+    out["OWN_ELO"] = np.where(at_home, out["HOME_ELO"], out["AWAY_ELO"])
+    out["OPPONENT_ELO"] = np.where(at_home, out["AWAY_ELO"], out["HOME_ELO"])
+    out["ELO_DIFF"] = out["OWN_ELO"] - out["OPPONENT_ELO"]
+    out = out.drop(columns=["HOME_ELO", "AWAY_ELO"])
+
+    club_state = out["TEAM_NAME"].map(CLUB_STATES)
+    venue_state = out["VENUE_STATE"] if "VENUE_STATE" in out.columns else pd.Series(np.nan, index=out.index)
+    out["INTERSTATE"] = np.where(
+        venue_state.isna() | club_state.isna(), np.nan, (venue_state != club_state).astype(float)
+    )
+    return out
+
+
+def add_season_aggregates(df: pd.DataFrame) -> pd.DataFrame:
+    """Leave-one-game-out season aggregates (post-season information boundary).
+
+    For every player-game, seasonal per-game means and totals are computed
+    excluding the current game, so the model sees sustained form without
+    reading the game's own line twice. First games of a season are left
+    missing. The full-season window is valid because the production forecast
+    happens after the home-and-away season; live variants would use to-date
+    aggregates instead.
+    """
+    out = df.copy()
+    out["_PLAYER_KEY"] = out[PLAYER_ID].astype(str)
+    grouped = out.groupby(["_PLAYER_KEY", "ROUND_YEAR"])
+    games = grouped["PROVIDERID"].transform("count")
+    out["SEASON_GAMES"] = games
+    denominator = (games - 1).where(games > 1)
+
+    for source in SEASON_AGGREGATE_SOURCES:
+        if source not in out.columns:
+            continue
+        total = grouped[source].transform("sum")
+        out[f"SEASON_{source}_PG"] = (total - out[source]) / denominator
+
+    if "COACH_VOTES" in out.columns:
+        votes = out["COACH_VOTES"].astype(float)
+        out["SEASON_COACH_VOTES_TOTAL"] = grouped["COACH_VOTES"].transform("sum") - votes
+        voted = (votes > 0).astype(float)
+        out["_VOTED"] = voted
+        voted_total = out.groupby(["_PLAYER_KEY", "ROUND_YEAR"])["_VOTED"].transform("sum")
+        out["SEASON_COACH_VOTE_RATE"] = (voted_total - voted) / denominator
+        out["SEASON_COACH_VOTES_RANK"] = out.groupby("ROUND_YEAR")[
+            "SEASON_COACH_VOTES_TOTAL"
+        ].rank(ascending=False, method="min")
+
+    if "PLAYERTEAM_OUTCOME" in out.columns:
+        win = (out["PLAYERTEAM_OUTCOME"] == "WIN").astype(float)
+        out["_WIN"] = win
+        win_total = out.groupby(["_PLAYER_KEY", "ROUND_YEAR"])["_WIN"].transform("sum")
+        out["SEASON_TEAM_WIN_RATE"] = (win_total - win) / denominator
+
+    return out.drop(columns=[column for column in ("_PLAYER_KEY", "_VOTED", "_WIN") if column in out])
+
+
 def build_feature_table(
     player_stats: pd.DataFrame,
     team_stats: pd.DataFrame,
@@ -268,6 +462,7 @@ def build_feature_table(
     )
 
     df = add_team_context(df)
+    df = add_match_context(df, teams)
     df = add_proportion_features(df)
     if player_details is not None:
         df = add_height_features(df, player_details)

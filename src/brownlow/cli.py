@@ -50,6 +50,7 @@ def run_audit() -> None:
         )
     else:
         print("AFLCA votes not found: run `fetch-coaches` to populate COACH_VOTES\n")
+    table = features.add_season_aggregates(table)
     crosswalk = ingest.build_crosswalk(player_stats, votes)
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
 
