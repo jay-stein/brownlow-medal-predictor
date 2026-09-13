@@ -12,3 +12,4 @@ def test_labelled_rows_filters_unresolved():
 def test_parse_seasons_range_and_list():
     assert parse_seasons("2020-2022") == [2020, 2021, 2022]
     assert parse_seasons("2021,2023") == [2021, 2023]
+    assert parse_seasons("2015-2017,2026") == [2015, 2016, 2017, 2026]

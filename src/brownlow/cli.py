@@ -67,11 +67,18 @@ def run_audit() -> None:
 
 
 def parse_seasons(value: str) -> list[int]:
-    """Parse ``2020-2024`` or ``2021,2023`` into a season list."""
-    if "-" in value:
-        start, end = value.split("-", 1)
-        return list(range(int(start), int(end) + 1))
-    return [int(part) for part in value.split(",")]
+    """Parse ``2020-2024``, ``2021,2023`` or mixed ``2015-2017,2026``."""
+    seasons: list[int] = []
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start, end = part.split("-", 1)
+            seasons.extend(range(int(start), int(end) + 1))
+        else:
+            seasons.append(int(part))
+    return seasons
 
 
 def _load_labelled() -> pd.DataFrame:
