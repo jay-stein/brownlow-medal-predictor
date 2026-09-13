@@ -617,3 +617,20 @@ h1 em {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.badge-ineligible {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 140, 140, 0.45);
+  background: rgba(255, 90, 90, 0.12);
+  color: #f2b8b8;
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.leaderboard li.ineligible {
+  opacity: 0.65;
+}
