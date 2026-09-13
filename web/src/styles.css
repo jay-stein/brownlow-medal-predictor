@@ -894,6 +894,49 @@ h1 em {
   line-height: 1.45;
 }
 
+.match-report {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.05);
+  border-radius: 0 8px 8px 0;
+}
+
+.report-text {
+  margin: 0 0 5px;
+  font-size: 0.75rem;
+  color: #dbe3f2;
+  line-height: 1.5;
+}
+
+.report-credit {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.report-credit a {
+  color: var(--gold-light);
+  text-decoration: none;
+}
+
+.report-credit a:hover {
+  text-decoration: underline;
+}
+
+.report-flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 220, 150, 0.45);
+  background: rgba(122, 220, 150, 0.12);
+  color: #b5ecc6;
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .vote-table {
   border-top: 1px solid rgba(255, 255, 255, 0.07);
   padding-top: 6px;

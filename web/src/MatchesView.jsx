@@ -28,6 +28,15 @@ function summarise(match) {
   return `${winner} won by ${margin}. Model 3-vote: ${top.name} (${pct(top.p3)}${tail}).`;
 }
 
+function mentionsTopPick(match) {
+  const top = match.votes?.[0];
+  const report = match.report;
+  if (!top || !report?.text) return false;
+  const surname = top.name.split(" ").slice(-1)[0].replace(/[^A-Za-z'-]/g, "").toLowerCase();
+  if (surname.length < 4) return false;
+  return report.text.toLowerCase().includes(surname);
+}
+
 function MatchCard({ match }) {
   const homeWon = match.homeScore > match.awayScore;
   const top = match.votes?.[0];
@@ -49,6 +58,20 @@ function MatchCard({ match }) {
         <span className={!homeWon ? "winner" : ""}>{match.away}</span>
       </h3>
       {summarise(match) ? <p className="match-summary">{summarise(match)}</p> : null}
+      {match.report ? (
+        <div className="match-report">
+          <p className="report-text">{match.report.text}</p>
+          <p className="report-credit">
+            <a href={match.report.url} target="_blank" rel="noreferrer">
+              {match.report.headline || "Match report"}
+            </a>{" "}
+            · {match.report.source}
+            {mentionsTopPick(match) ? (
+              <span className="report-flag">names our 3-vote pick</span>
+            ) : null}
+          </p>
+        </div>
+      ) : null}
       <div className="vote-table">
         <div className="vote-head">
           <span>Player</span>

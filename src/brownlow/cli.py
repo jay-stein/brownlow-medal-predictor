@@ -10,6 +10,9 @@ from pathlib import Path
 import pandas as pd
 
 from . import (
+    afl_reports as reports_mod,
+)
+from . import (
     aflca,
     eligibility,
     ensemble,
@@ -629,6 +632,33 @@ def run_compare_approaches(args: argparse.Namespace) -> None:
     print(f"\nWrote {output_path}")
 
 
+def run_fetch_reports(args: argparse.Namespace) -> None:
+    """Fetch official AFL match report excerpts for a season."""
+    labelled = _load_labelled()
+    season_rows = labelled[labelled["ROUND_YEAR"] == args.season]
+    if season_rows.empty:
+        raise SystemExit(f"no rows for season {args.season}")
+    fixtures = (
+        season_rows.groupby("PROVIDERID", as_index=False)
+        .agg(
+            round=("ROUND_ROUNDNUMBER", "first"),
+            season=("ROUND_YEAR", "first"),
+            home=("HOME_TEAM_NAME", "first"),
+            away=("AWAY_TEAM_NAME", "first"),
+        )
+        .rename(columns={"PROVIDERID": "match_id"})
+    )
+    output = Path(args.out) if args.out else paths.DATA_DIR / f"match_reports_{args.season}.json"
+    existing = {}
+    if output.exists() and not args.refresh:
+        existing = json.loads(output.read_text())
+    rounds = parse_seasons(args.rounds) if args.rounds else None
+    reports = reports_mod.fetch_reports(fixtures, existing, rounds=rounds, pause=args.pause)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(reports, indent=1))
+    print(f"\nwrote {len(reports)} match reports to {output}")
+
+
 def run_forecast(args: argparse.Namespace) -> None:
     """Simulate a season's count and report vote spreads and win probabilities."""
     season = args.season
@@ -969,6 +999,15 @@ def main() -> None:
         "compare-approaches", help="compare legacy/current/ensemble rolling records"
     )
 
+    report_parser = subparsers.add_parser(
+        "fetch-reports", help="fetch official AFL match report excerpts"
+    )
+    report_parser.add_argument("--season", type=int, default=folds.FORECAST_SEASON)
+    report_parser.add_argument("--rounds", default=None, help="optional round range, e.g. 1-5")
+    report_parser.add_argument("--out", default=None, help="default: data/match_reports_<season>.json")
+    report_parser.add_argument("--pause", type=float, default=0.4)
+    report_parser.add_argument("--refresh", action="store_true", help="refetch existing reports")
+
     forecast = subparsers.add_parser(
         "forecast", help="simulate a season's count and report probabilities"
     )
@@ -1010,6 +1049,8 @@ def main() -> None:
         run_ensemble_roll(args)
     elif args.command == "compare-approaches":
         run_compare_approaches(args)
+    elif args.command == "fetch-reports":
+        run_fetch_reports(args)
     elif args.command == "forecast":
         run_forecast(args)
 
