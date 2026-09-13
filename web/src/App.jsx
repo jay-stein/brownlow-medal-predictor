@@ -89,7 +89,12 @@ export default function App() {
           with calibrated uncertainty
         </p>
         <div className="chips">
-          <span>Model: {meta.model ?? "ranking"}</span>
+          <span>
+            Model:{" "}
+            {meta.model === "ranking_coaches"
+              ? "LambdaMART + coaches' votes"
+              : meta.model ?? "ranking"}
+          </span>
           <span>τ = {meta.tau ?? "—"}</span>
           <span>Effect scale = {meta.effectScale ?? "—"}</span>
           <span>Generated {meta.generated ?? "—"}</span>
@@ -113,13 +118,20 @@ export default function App() {
               return (
                 <li
                   key={entry.id}
-                  className={active ? "active" : ""}
+                  className={[active ? "active" : "", entry.ineligible ? "ineligible" : ""]
+                    .join(" ")
+                    .trim()}
                   onClick={() => setSelectedId(entry.id)}
                 >
                   <span className="rank">{rank}</span>
                   <span className="dot" style={{ background: teamColor(entry.team) }} />
                   <span className="who">
-                    <span className="name">{entry.name}</span>
+                    <span className="name">
+                      {entry.name}
+                      {entry.ineligible ? (
+                        <span className="badge-ineligible">ineligible</span>
+                      ) : null}
+                    </span>
                     <span className="team">{entry.team}</span>
                   </span>
                   <span className="votes">{entry.expectedVotes?.toFixed(1)}</span>
@@ -189,9 +201,11 @@ export default function App() {
               <span>P(first or joint)</span>
               <strong>{pct(player.pFirstOrJoint)}</strong>
               <small>
-                {player.winLow != null
-                  ? `${pct(player.winLow)}–${pct(player.winHigh)} across specs`
-                  : "single specification"}
+                {player.ineligible
+                  ? "suspended in 2026 — ineligible to win"
+                  : player.winLow != null
+                    ? `${pct(player.winLow)}–${pct(player.winHigh)} across specs`
+                    : "single specification"}
               </small>
             </div>
             <div className="stat">
@@ -250,16 +264,19 @@ export default function App() {
 
       <footer className="footnote">
         <p>
-          Method: match-grouped LambdaMART scores trained on 2012–2025 votes; Plackett–Luce
-          allocation with temperature τ fitted on {meta.tauMatches ?? "prior"} out-of-sample matches;
-          one persistent player-season effect at the calibrated scale. Backtest (2015–2025): 88.5%
-          contender coverage at the nominal 90% level, and the eventual winner averaged a 36%
-          pre-count probability.
+          Method: match-grouped LambdaMART scores trained on 2012–2025 votes, using match statistics
+          and the AFL Coaches Association's per-match panel votes as features; Plackett–Luce
+          allocation with temperature τ and persistent-effect scale σ calibrated jointly on
+          effect-integrated match likelihood and contender CRPS ({meta.tauSource ?? "prior seasons"});
+          historical player effects are shrunken residuals from prior seasons. Rolling 2018–2025
+          backtest: contender CRPS of 2.85, 90% interval coverage of 88%, and the model favourite
+          won 2 of the 5 most recent counts.
         </p>
         <p>
-          Post-round-24 conditional forecast: match statistics are observed, only the hidden votes
-          are simulated. Brownlow eligibility (suspensions) is not applied. Vote totals, bands and
-          probabilities are model estimates, not certainties.
+          Post-round-24 conditional forecast: 2026 match statistics and coaches' votes are observed,
+          only the hidden umpire votes are simulated. Suspended players keep their simulated votes
+          but are ineligible to win the medal, so their win probabilities are shown as zero (marked
+          "ineligible"). Vote totals, bands and probabilities are model estimates, not certainties.
         </p>
       </footer>
     </div>

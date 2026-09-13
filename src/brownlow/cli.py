@@ -8,7 +8,20 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import evaluate, features, folds, ingest, model, paths, scores, simulate
+from . import (
+    aflca,
+    eligibility,
+    evaluate,
+    features,
+    folds,
+    history,
+    ingest,
+    model,
+    paths,
+    scores,
+    simulate,
+    validation,
+)
 
 
 def run_audit() -> None:
@@ -23,6 +36,17 @@ def run_audit() -> None:
     table = features.build_feature_table(
         player_stats, team_stats, player_details=player_details, train_through=2025
     )
+    coaches_path = paths.DATA_DIR / "aflca_votes.csv"
+    if coaches_path.exists():
+        table, coaches_summary = aflca.attach_coaches_votes(table, coaches_path)
+        print(
+            "=== AFL Coaches Association votes ==="
+            f"\nmatched {coaches_summary['matched_rows']} / {coaches_summary['rows']} rows "
+            f"({coaches_summary['match_rate']:.1%}) to "
+            f"{coaches_summary['matched_matches']} matches\n"
+        )
+    else:
+        print("AFLCA votes not found: run `fetch-coaches` to populate COACH_VOTES\n")
     crosswalk = ingest.build_crosswalk(player_stats, votes)
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
 
@@ -43,11 +67,18 @@ def run_audit() -> None:
 
 
 def parse_seasons(value: str) -> list[int]:
-    """Parse ``2020-2024`` or ``2021,2023`` into a season list."""
-    if "-" in value:
-        start, end = value.split("-", 1)
-        return list(range(int(start), int(end) + 1))
-    return [int(part) for part in value.split(",")]
+    """Parse ``2020-2024``, ``2021,2023`` or mixed ``2015-2017,2026``."""
+    seasons: list[int] = []
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start, end = part.split("-", 1)
+            seasons.extend(range(int(start), int(end) + 1))
+        else:
+            seasons.append(int(part))
+    return seasons
 
 
 def _load_labelled() -> pd.DataFrame:
@@ -216,6 +247,236 @@ def run_calibrate_effects(args: argparse.Namespace) -> None:
         print(f"\nWrote effect-scale outputs to {output_dir}")
 
 
+def run_calibrate_joint(args: argparse.Namespace) -> None:
+    """Score the joint (tau, effect scale) grid and select production parameters."""
+    scores_by_season = _load_cached_scores(args.model)
+    requested = parse_seasons(args.seasons)
+    missing = [season for season in requested if season not in scores_by_season]
+    if missing:
+        raise SystemExit(
+            f"no cached {args.model} scores for {missing}: "
+            f"run `baseline --model {args.model} --seasons {missing[0]}` first"
+        )
+
+    tau_values = [float(part) for part in args.taus.split(",")]
+    scales = [float(part) for part in args.scales.split(",")]
+    grid = validation.joint_calibration_grid(
+        scores_by_season,
+        requested,
+        tau_values,
+        scales,
+        n_sims=args.n_sims,
+        n_draws=args.n_draws,
+        contender_count=args.contenders,
+        seed=args.seed,
+    )
+
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grid_path = output_dir / f"joint_grid_{args.model}.csv"
+    grid.to_csv(grid_path, index=False)
+
+    tune_seasons = parse_seasons(args.tune_seasons)
+    selection = validation.select_joint_params(grid, tune_seasons)
+    selection_path = output_dir / f"joint_selection_{args.model}.json"
+    selection_path.write_text(
+        json.dumps(
+            {
+                "tau": selection.tau,
+                "effect_scale": selection.effect_scale,
+                "model_key": args.model,
+                "selection_rule": (
+                    "equal-weight z(effect-integrated match NLL) + "
+                    "z(contender CRPS), tie-break lower NLL"
+                ),
+                "tune_seasons": tune_seasons,
+                "taus": tau_values,
+                "scales": scales,
+                "match_nll_optimum": {
+                    "tau": selection.best_match_nll_tau,
+                    "effect_scale": selection.best_match_nll_scale,
+                },
+                "crps_optimum": {
+                    "tau": selection.best_crps_tau,
+                    "effect_scale": selection.best_crps_scale,
+                },
+                "n_sims": args.n_sims,
+                "n_draws": args.n_draws,
+                "seed": args.seed,
+            },
+            indent=2,
+        )
+    )
+
+    with pd.option_context("display.width", 200):
+        print("=== selection summary over the evidence seasons ===")
+        print(selection.summary.round(4).to_string(index=False))
+    print(
+        f"\nselected tau={selection.tau} scale={selection.effect_scale}"
+        f" | match-NLL optimum tau={selection.best_match_nll_tau} "
+        f"scale={selection.best_match_nll_scale}"
+        f" | CRPS optimum tau={selection.best_crps_tau} scale={selection.best_crps_scale}"
+    )
+    print(f"\nWrote {grid_path} and {selection_path}")
+
+
+def run_rolling_backtest(args: argparse.Namespace) -> None:
+    """Fully rolling per-season validation from a saved joint grid."""
+    grid_path = paths.PROCESSED_DIR / "evaluation" / f"joint_grid_{args.model}.csv"
+    if not grid_path.exists():
+        raise SystemExit(
+            f"missing {grid_path}: run `calibrate-joint --model {args.model}` first"
+        )
+    grid = pd.read_csv(grid_path)
+    table = validation.rolling_validation(
+        grid,
+        report_seasons=parse_seasons(args.report_seasons),
+        min_evidence=args.min_evidence,
+    )
+    scores_by_season = _load_cached_scores(args.model)
+    if not table.empty:
+        for index, row in table.iterrows():
+            season = int(row["season"])
+            frame = scores_by_season.get(season)
+            if frame is None:
+                continue
+            ineligible = eligibility.ineligible_ids(season)
+            simulation = simulate.simulate_season(
+                frame,
+                float(row["tau_selected"]),
+                effect_scale=float(row["scale_selected"]),
+                n_sims=args.n_sims,
+                seed=args.seed,
+                ineligible=ineligible,
+            )
+            metrics = simulate.season_metrics(
+                simulation, contender_count=args.contenders, ineligible=ineligible
+            )
+            table.loc[index, "favorite_won"] = metrics["favorite_won"]
+            table.loc[index, "winner_probability"] = metrics["winner_probability"]
+            table.loc[index, "winner_mean_rank"] = metrics["winner_mean_rank"]
+            table.loc[index, "n_ineligible"] = len(ineligible)
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"rolling_backtest_{args.model}.csv"
+    table.to_csv(output_path, index=False)
+
+    columns = [column for column in validation.ROLLING_COLUMNS if column in table.columns]
+    if not table.empty:
+        with pd.option_context("display.width", 240, "display.max_columns", 40):
+            print(table[columns].round(4).to_string(index=False))
+        summary = {
+            "seasons": len(table),
+            "coverage_90_contenders": table["coverage_90_contenders"].mean(),
+            "coverage_50_contenders": table["coverage_50_contenders"].mean(),
+            "mean_crps_contenders": table["mean_crps_contenders"].mean(),
+            "favorites_won": int(table["favorite_won"].sum()),
+        }
+        print(f"\nrolling summary: {summary}")
+    print(f"\nWrote {output_path}")
+
+
+def run_player_effects(args: argparse.Namespace) -> None:
+    """Grid-search partially pooled historical player effects."""
+    scores_by_season = _load_cached_scores(args.model)
+    requested = parse_seasons(args.seasons)
+    missing = [season for season in requested if season not in scores_by_season]
+    if missing:
+        raise SystemExit(
+            f"no cached {args.model} scores for {missing}: "
+            f"run `baseline --model {args.model} --seasons {missing[0]}` first"
+        )
+
+    tau = args.tau
+    effect_scale = args.scale
+    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{args.model}.json"
+    if (tau is None or effect_scale is None) and joint_path.exists():
+        joint = json.loads(joint_path.read_text())
+        tau = float(joint["tau"]) if tau is None else tau
+        effect_scale = float(joint["effect_scale"]) if effect_scale is None else effect_scale
+    if tau is None or effect_scale is None:
+        raise SystemExit("pass --tau and --scale, or run `calibrate-joint` first")
+
+    residual_history = history.player_residual_history(scores_by_season, float(tau))
+    shrinkages = [float(part) for part in args.shrinkages.split(",")]
+    mappings = [float(part) for part in args.mappings.split(",")]
+    half_lives = [float(part) for part in args.half_lives.split(",")]
+    candidates = [(k, m, h) for k in shrinkages for m in mappings for h in half_lives]
+
+    grid = validation.player_effect_grid(
+        scores_by_season,
+        residual_history,
+        requested,
+        tau=float(tau),
+        effect_scale=float(effect_scale),
+        candidates=candidates,
+        n_sims=args.n_sims,
+        n_draws=args.n_draws,
+        contender_count=args.contenders,
+        seed=args.seed,
+    )
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grid_path = output_dir / f"player_effect_grid_{args.model}.csv"
+    grid.to_csv(grid_path, index=False)
+
+    table = validation.rolling_player_effect_validation(
+        grid,
+        report_seasons=parse_seasons(args.report_seasons),
+        min_evidence=args.min_evidence,
+    )
+    table_path = output_dir / f"rolling_player_effects_{args.model}.csv"
+    table.to_csv(table_path, index=False)
+
+    if not table.empty:
+        columns = [column for column in validation.PLAYER_EFFECT_COLUMNS if column in table.columns]
+        with pd.option_context("display.width", 240, "display.max_columns", 40):
+            print("=== rolling selection with paired baseline ===")
+            print(table[columns].round(4).to_string(index=False))
+        improved = int((table["delta_crps_contenders"] < 0).sum())
+        print(f"\nseasons where the adjustment improves contender CRPS: {improved}/{len(table)}")
+        print(f"mean delta contender CRPS: {table['delta_crps_contenders'].mean():.4f}")
+
+    selection = validation.select_player_effects(grid, requested)
+    selection_path = output_dir / f"player_effect_selection_{args.model}.json"
+    selection_path.write_text(
+        json.dumps(
+            {
+                "shrinkage": selection.shrinkage,
+                "mapping": selection.mapping,
+                "half_life": selection.half_life,
+                "tau": float(tau),
+                "effect_scale": float(effect_scale),
+                "model_key": args.model,
+                "selection_rule": "equal-weight z(match NLL) + z(contender CRPS)",
+                "tune_seasons": requested,
+            },
+            indent=2,
+        )
+    )
+    print(
+        f"\nproduction selection over {requested[0]}-{requested[-1]}: "
+        f"shrinkage={selection.shrinkage} mapping={selection.mapping} "
+        f"half_life={selection.half_life}"
+    )
+    print(f"\nWrote {grid_path}, {table_path} and {selection_path}")
+
+
+def run_fetch_coaches(args: argparse.Namespace) -> None:
+    """Scrape AFL Coaches Association per-match votes for the given seasons."""
+    seasons = parse_seasons(args.seasons)
+    frames = []
+    for season in seasons:
+        print(f"=== {season} ===")
+        frame = aflca.fetch_season(season, pause=args.pause)
+        frames.append(frame)
+    combined = pd.concat(frames, ignore_index=True)
+    output = Path(args.out)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(output, index=False)
+    print(f"\nwrote {len(combined)} rows to {output}")
+
+
 def run_forecast(args: argparse.Namespace) -> None:
     """Simulate a season's count and report vote spreads and win probabilities."""
     season = args.season
@@ -249,14 +510,53 @@ def run_forecast(args: argparse.Namespace) -> None:
         if candidate < season
     ]
     tau, tau_matches = evaluate.fit_pooled_tau(prior_frames)
+    tau_source = f"leak-free MLE on {tau_matches} earlier matches"
 
+    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{model_key}.json"
     calibration_path = paths.PROCESSED_DIR / "evaluation" / f"calibrated_effect_scale_{model_key}.json"
     if args.effect_scale is not None:
         effect_scale = args.effect_scale
+    elif joint_path.exists():
+        joint = json.loads(joint_path.read_text())
+        tau = float(joint["tau"])
+        effect_scale = float(joint["effect_scale"])
+        tau_source = (
+            f"joint calibration on seasons {joint['tune_seasons'][0]}-{joint['tune_seasons'][-1]}"
+        )
     elif calibration_path.exists():
         effect_scale = float(json.loads(calibration_path.read_text())["effect_scale"])
     else:
         effect_scale = 0.0
+
+    player_effect_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"player_effect_selection_{model_key}.json"
+    )
+    player_effect = None
+    if player_effect_path.exists():
+        player_effect = json.loads(player_effect_path.read_text())
+        prior = {
+            candidate: scores.load_scores(candidate, model_key).frame
+            for candidate in scores.cached_seasons(model_key)
+            if candidate < season
+        }
+        residual_history = history.player_residual_history(prior, tau)
+        frame = history.attach_player_effects(
+            frame,
+            residual_history,
+            season,
+            shrinkage=float(player_effect["shrinkage"]),
+            mapping=float(player_effect["mapping"]),
+            half_life=float(player_effect["half_life"]),
+        )
+        print(
+            f"  player effects: shrinkage={player_effect['shrinkage']} "
+            f"mapping={player_effect['mapping']} half_life={player_effect['half_life']} "
+            f"({len(residual_history)} prior player-seasons)"
+        )
+
+    ineligible = eligibility.ineligible_ids(season)
+    if ineligible:
+        print(f"  eligibility: {len(ineligible)} suspended players excluded from the medal")
 
     simulation = simulate.simulate_season(
         frame,
@@ -266,6 +566,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         seed=args.seed,
         track_rounds=args.web_json is not None,
         path_count=args.web_paths,
+        ineligible=ineligible,
     )
     players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
 
@@ -275,7 +576,12 @@ def run_forecast(args: argparse.Namespace) -> None:
         parts = []
         for scale in scales:
             scenario = simulate.simulate_season(
-                frame, tau, effect_scale=scale, n_sims=args.n_sims, seed=args.seed
+                frame,
+                tau,
+                effect_scale=scale,
+                n_sims=args.n_sims,
+                seed=args.seed,
+                ineligible=ineligible,
             )
             subset = scenario.players[
                 [
@@ -334,7 +640,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         columns += ["mean_votes_min", "mean_votes_max", "p_first_or_joint_min", "p_first_or_joint_max"]
 
     print(
-        f"\n=== {season} Brownlow forecast ({model_key}, tau={tau:.3f} from {tau_matches} matches, "
+        f"\n=== {season} Brownlow forecast ({model_key}, tau={tau:.3f} from {tau_source}, "
         f"effect scale={effect_scale}, {args.n_sims} simulations) ===\n"
     )
     with pd.option_context("display.width", 240, "display.max_columns", 40):
@@ -351,7 +657,10 @@ def run_forecast(args: argparse.Namespace) -> None:
                 "model": model_key,
                 "tau": round(tau, 4),
                 "tauMatches": tau_matches,
+                "tauSource": tau_source,
                 "effectScale": effect_scale,
+                "playerEffect": player_effect,
+                "nIneligible": len(ineligible),
                 "nSims": args.n_sims,
                 "generated": pd.Timestamp.now().strftime("%Y-%m-%d"),
                 "sensitivityScales": scales,
@@ -399,6 +708,55 @@ def main() -> None:
     effects.add_argument("--seed", type=int, default=42)
     effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.REGRESSION)
 
+    joint = subparsers.add_parser(
+        "calibrate-joint", help="joint (tau, effect scale) grid with integrated match NLL"
+    )
+    joint.add_argument("--seasons", default="2015-2025", help="seasons scored in the grid")
+    joint.add_argument(
+        "--tune-seasons", default="2015-2025", help="evidence seasons used for selection"
+    )
+    joint.add_argument("--taus", default="0.6,0.7,0.8,0.9,1.0,1.1")
+    joint.add_argument("--scales", default="0,0.1,0.2,0.3,0.4,0.5,0.6")
+    joint.add_argument("--n-sims", type=int, default=2000)
+    joint.add_argument("--n-draws", type=int, default=256)
+    joint.add_argument("--contenders", type=int, default=15)
+    joint.add_argument("--seed", type=int, default=42)
+    joint.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+
+    rolling = subparsers.add_parser(
+        "rolling-backtest", help="fully rolling per-season validation from a saved joint grid"
+    )
+    rolling.add_argument("--report-seasons", default="2018-2025")
+    rolling.add_argument("--min-evidence", type=int, default=3)
+    rolling.add_argument("--n-sims", type=int, default=2000)
+    rolling.add_argument("--contenders", type=int, default=15)
+    rolling.add_argument("--seed", type=int, default=42)
+    rolling.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+
+    player_effects = subparsers.add_parser(
+        "player-effects", help="grid-search partially pooled historical player effects"
+    )
+    player_effects.add_argument("--seasons", default="2015-2025", help="seasons scored in the grid")
+    player_effects.add_argument("--report-seasons", default="2018-2025")
+    player_effects.add_argument("--min-evidence", type=int, default=3)
+    player_effects.add_argument("--tau", type=float, default=None, help="default: joint selection")
+    player_effects.add_argument("--scale", type=float, default=None, help="default: joint selection")
+    player_effects.add_argument("--shrinkages", default="20,50,100,200")
+    player_effects.add_argument("--mappings", default="0,0.5,1,2,4")
+    player_effects.add_argument("--half-lives", default="0,5")
+    player_effects.add_argument("--n-sims", type=int, default=2000)
+    player_effects.add_argument("--n-draws", type=int, default=256)
+    player_effects.add_argument("--contenders", type=int, default=15)
+    player_effects.add_argument("--seed", type=int, default=42)
+    player_effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+
+    coaches = subparsers.add_parser(
+        "fetch-coaches", help="scrape AFL Coaches Association per-match votes"
+    )
+    coaches.add_argument("--seasons", default="2012-2026")
+    coaches.add_argument("--out", default="data/aflca_votes.csv")
+    coaches.add_argument("--pause", type=float, default=1.0, help="seconds between requests")
+
     forecast = subparsers.add_parser(
         "forecast", help="simulate a season's count and report probabilities"
     )
@@ -426,6 +784,14 @@ def main() -> None:
         run_evaluate(args)
     elif args.command == "calibrate-effects":
         run_calibrate_effects(args)
+    elif args.command == "calibrate-joint":
+        run_calibrate_joint(args)
+    elif args.command == "rolling-backtest":
+        run_rolling_backtest(args)
+    elif args.command == "player-effects":
+        run_player_effects(args)
+    elif args.command == "fetch-coaches":
+        run_fetch_coaches(args)
     elif args.command == "forecast":
         run_forecast(args)
 
