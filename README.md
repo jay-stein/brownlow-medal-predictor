@@ -148,7 +148,7 @@ The large datasets are **not committed**; see [`data/README.md`](data/README.md)
 - [x] AFLCA coaches' votes as features (the winning variant).
 - [x] Award-stage suspension eligibility with committed sources.
 - [x] **Approach comparison** against the reconstructed legacy baseline and a stacking ensemble (`legacy-roll`, `ensemble-roll`, `compare-approaches`); the current model wins the composite scorecard, the ensemble wins on distributional calibration.
-- [ ] **Season-form features** (leave-one-game-out aggregates): improved rolling contender CRPS from 2.85 to 2.62 with the same favourite hit rate; awaiting a decision to switch production.
+- [ ] **Season-form features** (leave-one-game-out aggregates): improved rolling contender CRPS from 2.85 to 2.62 with the same favourite hit rate; promotion checklist in [`TODO.md`](TODO.md).
 - [ ] **Plackett–Luce objective + coaches' votes combined** (best match NLL plus the human signal).
 - [ ] **Live in-season variant** that updates weekly with only the information available at that round.
 - [ ] **Match-block bootstrap ensemble** for model-parameter uncertainty, with award metrics in the selection criterion.
