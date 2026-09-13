@@ -2,6 +2,58 @@ import TeamLogo from "./TeamLogo.jsx";
 
 const RECORDS = [
   {
+    season: 2014,
+    expected: "Gary Ablett",
+    expectedTeam: "Gold Coast SUNS",
+    expectedP: 0.226,
+    expectedVotes: 19.8,
+    actual: "Matt Priddis",
+    actualTeam: "West Coast Eagles",
+    actualVotes: 26,
+    rank: 4,
+    actualP: 0.178,
+    hit: false,
+  },
+  {
+    season: 2015,
+    expected: "Matt Priddis",
+    expectedTeam: "West Coast Eagles",
+    expectedP: 0.582,
+    expectedVotes: 27.2,
+    actual: "Nat Fyfe",
+    actualTeam: "Fremantle",
+    actualVotes: 31,
+    rank: 2,
+    actualP: 0.219,
+    hit: false,
+  },
+  {
+    season: 2016,
+    expected: "Patrick Dangerfield",
+    expectedTeam: "Geelong Cats",
+    expectedP: 0.925,
+    expectedVotes: 35.5,
+    actual: "Patrick Dangerfield",
+    actualTeam: "Geelong Cats",
+    actualVotes: 35,
+    rank: 1,
+    actualP: 0.925,
+    hit: true,
+  },
+  {
+    season: 2017,
+    expected: "Dustin Martin",
+    expectedTeam: "Richmond",
+    expectedP: 0.988,
+    expectedVotes: 37.6,
+    actual: "Dustin Martin",
+    actualTeam: "Richmond",
+    actualVotes: 36,
+    rank: 1,
+    actualP: 0.988,
+    hit: true,
+  },
+  {
     season: 2018,
     expected: "Tom Mitchell",
     expectedTeam: "Hawthorn",
@@ -138,8 +190,8 @@ export default function PastWinners() {
         Every season is forecast with only earlier data, using the same rolling procedure as the
         backtests (10,000 simulations, suspensions applied). <b>Expected</b> is the player with the
         highest P(first or joint) before the count; <b>winner rank</b> is where the actual medallist
-        sat in that ordering. 2018–2020 used the same procedure with less training history, which is
-        why the model grows more confident over time.
+        sat in that ordering. The earliest seasons (2014–2017) used the same machinery with the
+        limited history available from 2013, which is why the model grows more confident over time.
       </p>
 
       <div className="summary-strip">
