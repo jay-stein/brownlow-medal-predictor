@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import MatchesView from "./MatchesView.jsx";
 import NerdyStuff from "./NerdyStuff.jsx";
+import PastWinners from "./PastWinners.jsx";
 import RoundVotes from "./RoundVotes.jsx";
 import TeamLogo from "./TeamLogo.jsx";
+import TeamMatchesView from "./TeamMatchesView.jsx";
 import TeamsView from "./TeamsView.jsx";
 import TopWorms from "./TopWorms.jsx";
 import WormChart from "./WormChart.jsx";
@@ -116,14 +118,28 @@ export default function App() {
           className={view === "teams" ? "active" : ""}
           onClick={() => setView("teams")}
         >
-          Teams
+          Teams Totals
         </button>
         <button
           type="button"
           className={view === "matches" ? "active" : ""}
           onClick={() => setView("matches")}
         >
-          Matches
+          All Matches
+        </button>
+        <button
+          type="button"
+          className={view === "teamMatches" ? "active" : ""}
+          onClick={() => setView("teamMatches")}
+        >
+          Matches by Team
+        </button>
+        <button
+          type="button"
+          className={view === "winners" ? "active" : ""}
+          onClick={() => setView("winners")}
+        >
+          Past Winners
         </button>
         <button
           type="button"
@@ -348,6 +364,12 @@ export default function App() {
       {view === "teams" && <TeamsView teams={data.teams ?? []} />}
 
       {view === "matches" && <MatchesView matches={data.matches ?? []} rounds={data.rounds} />}
+
+      {view === "teamMatches" && (
+        <TeamMatchesView matches={data.matches ?? []} teams={data.teams ?? []} />
+      )}
+
+      {view === "winners" && <PastWinners />}
 
       {view === "nerdy" && <NerdyStuff meta={meta} />}
 
