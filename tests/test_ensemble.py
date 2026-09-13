@@ -32,13 +32,12 @@ def test_weight_candidates_form_a_simplex():
         assert abs(sum(weights.values()) - 1.0) < 1e-9
 
 
-def test_combine_scores_z_normalises_within_matches():
+def test_combine_scores_standardises_globally():
     first = _member([3.0, 2.0, 1.0, 0.0])
     second = _member([0.0, 1.0, 2.0, 3.0])
     combined = ensemble.combine_scores({"a": first, "b": second}, {"a": 1.0, "b": 0.0})
-    grouped = combined.groupby("PROVIDERID")["UTILITY"]
-    assert np.allclose(grouped.mean(), 0.0, atol=1e-9)
-    assert np.allclose(grouped.std(ddof=0), 1.0, atol=1e-9)
+    assert np.isclose(combined["UTILITY"].mean(), 0.0, atol=1e-9)
+    assert np.isclose(combined["UTILITY"].std(ddof=0), 1.0, atol=1e-9)
 
     blended = ensemble.combine_scores({"a": first, "b": second}, {"a": 0.5, "b": 0.5})
     assert np.allclose(blended["UTILITY"], 0.0, atol=1e-9)

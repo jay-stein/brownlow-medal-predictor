@@ -22,6 +22,7 @@ from __future__ import annotations
 import itertools
 import json
 
+import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 
@@ -120,7 +121,13 @@ def combine_scores(
     member_frames: dict[str, pd.DataFrame],
     weights: dict[str, float],
 ) -> pd.DataFrame:
-    """Weighted sum of within-match z-scored member utilities."""
+    """Weighted sum of globally standardised member utilities.
+
+    Each member is z-scored over the whole season (not within matches), which
+    preserves the relative spread of utilities inside a match — the quantity
+    the Plackett-Luce allocation depends on. A pure member therefore
+    reproduces its raw model up to a global scale absorbed by the temperature.
+    """
     names = list(member_frames)
     base = member_frames[names[0]].reset_index(drop=True)
     keys = base[KEY_COLUMNS].reset_index(drop=True)
@@ -135,13 +142,11 @@ def combine_scores(
         weight = float(weights.get(name, 0.0))
         if weight == 0.0:
             continue
-        work = base[[MATCH_COLUMN]].copy()
-        work["utility"] = member_frames[name][UTILITY_COLUMN].to_numpy(dtype=float)
-        grouped = work.groupby(MATCH_COLUMN)["utility"]
-        mean = grouped.transform("mean")
-        std = grouped.transform(lambda values: values.std(ddof=0)).fillna(1.0).replace(0.0, 1.0)
-        z = (work["utility"] - mean) / std
-        combined[UTILITY_COLUMN] += weight * z.to_numpy()
+        utilities = member_frames[name][UTILITY_COLUMN].to_numpy(dtype=float)
+        spread = float(np.std(utilities))
+        scale = spread if np.isfinite(spread) and spread > 0.0 else 1.0
+        z = (utilities - float(np.mean(utilities))) / scale
+        combined[UTILITY_COLUMN] += weight * z
     return combined
 
 
