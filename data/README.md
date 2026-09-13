@@ -1,19 +1,8 @@
 # Data
 
-This folder holds the project datasets. The large raw extracts are **gitignored** (they total well over 100 MB) and are regenerated with the R scripts in [`../R`](../R). Small prediction-source snapshots are committed so the pipeline can be re-run without re-scraping.
+The datasets are **not committed**. The large raw extracts are regenerated with the R scripts in [`../R`](../R), and every derived output is rebuilt from them.
 
-## Committed files
-
-| File | Source |
-|------|--------|
-| `afl_website_2025.csv` | AFL API Brownlow award endpoint (`notebooks/scrape_aflcom.ipynb`) |
-| `betfair_2025.csv` | Betfair Data Supplier API (`notebooks/scrape_betfair.ipynb`) |
-| `2025_espn_predictions.csv` | ESPN Brownlow predictor |
-| `espn_historical_predictions.xlsx` | ESPN 2021–2024 predictions (evaluation) |
-| `wheelo-brownlow-predictions.csv` | WheeloRatings |
-| `bonus_player_team_map.csv` | Manual player→team fixes for name matching |
-
-## Regenerating the large extracts
+## Regenerating the extracts
 
 | File | Source |
 |------|--------|
@@ -52,4 +41,6 @@ Notes:
 - `unmatched_players.csv`, `ambiguous_players.csv` — crosswalk audit trails
 - `labelled_player_games.parquet` — the feature table with three-state labels
 
-`baseline`, `evaluate` and `calibrate-effects` add per-season score caches and evaluation tables under `data/processed/scores/` and `data/processed/evaluation/`.
+`baseline`, `evaluate`, `calibrate-effects` and `forecast` add per-season score caches, evaluation tables and forecast outputs under `data/processed/scores/`, `data/processed/evaluation/` and `data/processed/forecast/`.
+
+Earlier iterations also used small prediction snapshots (AFL.com.au, Betfair, ESPN, WheeloRatings) for external comparisons; those files and the notebooks that consumed them are preserved in the repository history.

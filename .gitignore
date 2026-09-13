@@ -19,8 +19,6 @@ data/player_details_*_afl.csv
 
 # Derived outputs
 data/processed/
-models/ensemble_predictions.csv
-result/*.csv
 
 # Web app
 web/node_modules/
