@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import evaluate, features, folds, ingest, model, paths, scores, simulate, validation
+from . import evaluate, features, folds, history, ingest, model, paths, scores, simulate, validation
 
 
 def run_audit() -> None:
@@ -322,6 +322,92 @@ def run_rolling_backtest(args: argparse.Namespace) -> None:
     print(f"\nWrote {output_path}")
 
 
+def run_player_effects(args: argparse.Namespace) -> None:
+    """Grid-search partially pooled historical player effects."""
+    scores_by_season = _load_cached_scores(args.model)
+    requested = parse_seasons(args.seasons)
+    missing = [season for season in requested if season not in scores_by_season]
+    if missing:
+        raise SystemExit(
+            f"no cached {args.model} scores for {missing}: "
+            f"run `baseline --model {args.model} --seasons {missing[0]}` first"
+        )
+
+    tau = args.tau
+    effect_scale = args.scale
+    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{args.model}.json"
+    if (tau is None or effect_scale is None) and joint_path.exists():
+        joint = json.loads(joint_path.read_text())
+        tau = float(joint["tau"]) if tau is None else tau
+        effect_scale = float(joint["effect_scale"]) if effect_scale is None else effect_scale
+    if tau is None or effect_scale is None:
+        raise SystemExit("pass --tau and --scale, or run `calibrate-joint` first")
+
+    residual_history = history.player_residual_history(scores_by_season, float(tau))
+    shrinkages = [float(part) for part in args.shrinkages.split(",")]
+    mappings = [float(part) for part in args.mappings.split(",")]
+    half_lives = [float(part) for part in args.half_lives.split(",")]
+    candidates = [(k, m, h) for k in shrinkages for m in mappings for h in half_lives]
+
+    grid = validation.player_effect_grid(
+        scores_by_season,
+        residual_history,
+        requested,
+        tau=float(tau),
+        effect_scale=float(effect_scale),
+        candidates=candidates,
+        n_sims=args.n_sims,
+        n_draws=args.n_draws,
+        contender_count=args.contenders,
+        seed=args.seed,
+    )
+    output_dir = paths.PROCESSED_DIR / "evaluation"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grid_path = output_dir / f"player_effect_grid_{args.model}.csv"
+    grid.to_csv(grid_path, index=False)
+
+    table = validation.rolling_player_effect_validation(
+        grid,
+        report_seasons=parse_seasons(args.report_seasons),
+        min_evidence=args.min_evidence,
+    )
+    table_path = output_dir / f"rolling_player_effects_{args.model}.csv"
+    table.to_csv(table_path, index=False)
+
+    if not table.empty:
+        columns = [column for column in validation.PLAYER_EFFECT_COLUMNS if column in table.columns]
+        with pd.option_context("display.width", 240, "display.max_columns", 40):
+            print("=== rolling selection with paired baseline ===")
+            print(table[columns].round(4).to_string(index=False))
+        improved = int((table["delta_crps_contenders"] < 0).sum())
+        print(f"\nseasons where the adjustment improves contender CRPS: {improved}/{len(table)}")
+        print(f"mean delta contender CRPS: {table['delta_crps_contenders'].mean():.4f}")
+
+    selection = validation.select_player_effects(grid, requested)
+    selection_path = output_dir / f"player_effect_selection_{args.model}.json"
+    selection_path.write_text(
+        json.dumps(
+            {
+                "shrinkage": selection.shrinkage,
+                "mapping": selection.mapping,
+                "half_life": selection.half_life,
+                "tau": float(tau),
+                "effect_scale": float(effect_scale),
+                "model_key": args.model,
+                "selection_rule": "equal-weight z(match NLL) + z(contender CRPS)",
+                "tune_seasons": requested,
+            },
+            indent=2,
+        )
+    )
+    print(
+        f"\nproduction selection over {requested[0]}-{requested[-1]}: "
+        f"shrinkage={selection.shrinkage} mapping={selection.mapping} "
+        f"half_life={selection.half_life}"
+    )
+    print(f"\nWrote {grid_path}, {table_path} and {selection_path}")
+
+
 def run_forecast(args: argparse.Namespace) -> None:
     """Simulate a season's count and report vote spreads and win probabilities."""
     season = args.season
@@ -537,6 +623,23 @@ def main() -> None:
     rolling.add_argument("--min-evidence", type=int, default=3)
     rolling.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
 
+    player_effects = subparsers.add_parser(
+        "player-effects", help="grid-search partially pooled historical player effects"
+    )
+    player_effects.add_argument("--seasons", default="2015-2025", help="seasons scored in the grid")
+    player_effects.add_argument("--report-seasons", default="2018-2025")
+    player_effects.add_argument("--min-evidence", type=int, default=3)
+    player_effects.add_argument("--tau", type=float, default=None, help="default: joint selection")
+    player_effects.add_argument("--scale", type=float, default=None, help="default: joint selection")
+    player_effects.add_argument("--shrinkages", default="20,50,100,200")
+    player_effects.add_argument("--mappings", default="0,0.5,1,2,4")
+    player_effects.add_argument("--half-lives", default="0,5")
+    player_effects.add_argument("--n-sims", type=int, default=2000)
+    player_effects.add_argument("--n-draws", type=int, default=256)
+    player_effects.add_argument("--contenders", type=int, default=15)
+    player_effects.add_argument("--seed", type=int, default=42)
+    player_effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+
     forecast = subparsers.add_parser(
         "forecast", help="simulate a season's count and report probabilities"
     )
@@ -568,6 +671,8 @@ def main() -> None:
         run_calibrate_joint(args)
     elif args.command == "rolling-backtest":
         run_rolling_backtest(args)
+    elif args.command == "player-effects":
+        run_player_effects(args)
     elif args.command == "forecast":
         run_forecast(args)
 

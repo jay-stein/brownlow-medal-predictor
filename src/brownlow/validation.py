@@ -24,6 +24,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from . import history as history_effects
 from . import simulate
 
 DEFAULT_TAU_GRID: tuple[float, ...] = (0.6, 0.7, 0.8, 0.9, 1.0, 1.1)
@@ -103,6 +104,17 @@ class JointSelection:
     best_crps_scale: float
 
 
+def _standardise(summary: pd.DataFrame, nll_weight: float, crps_weight: float) -> pd.DataFrame:
+    """Standardise both metrics across candidates and combine them."""
+    for column in ("match_nll", "crps"):
+        std = float(summary[column].std(ddof=0))
+        summary[f"z_{column}"] = (summary[column] - summary[column].mean()) / (
+            std if std > 0.0 else 1.0
+        )
+    summary["combined"] = nll_weight * summary["z_match_nll"] + crps_weight * summary["z_crps"]
+    return summary
+
+
 def select_joint_params(
     grid: pd.DataFrame,
     evidence_seasons: list[int],
@@ -123,12 +135,7 @@ def select_joint_params(
         subset.groupby(["tau", "effect_scale"], as_index=False)
         .agg(match_nll=("match_nll", "mean"), crps=("mean_crps_contenders", "mean"))
     )
-    for column in ("match_nll", "crps"):
-        std = float(summary[column].std(ddof=0))
-        summary[f"z_{column}"] = (summary[column] - summary[column].mean()) / (
-            std if std > 0.0 else 1.0
-        )
-    summary["combined"] = nll_weight * summary["z_match_nll"] + crps_weight * summary["z_crps"]
+    summary = _standardise(summary, nll_weight, crps_weight)
     best = summary.sort_values(["combined", "match_nll"]).iloc[0]
     best_nll = summary.sort_values(["match_nll", "crps"]).iloc[0]
     best_crps = summary.sort_values(["crps", "match_nll"]).iloc[0]
@@ -187,6 +194,157 @@ def rolling_validation(
                         selection.best_match_nll_tau - selection.best_crps_tau,
                         selection.best_match_nll_scale - selection.best_crps_scale,
                     )
+                ),
+            }
+        )
+        rows.append(record)
+    return pd.DataFrame(rows)
+
+
+PLAYER_EFFECT_COLUMNS = [
+    "season",
+    "shrinkage_selected",
+    "mapping_selected",
+    "half_life_selected",
+    "evidence_seasons",
+    "mean_crps_contenders",
+    "baseline_crps_contenders",
+    "delta_crps_contenders",
+    "coverage_90_contenders",
+    "baseline_coverage_90_contenders",
+    "match_nll",
+    "baseline_match_nll",
+    "favorite_won",
+    "winner_mean_rank",
+]
+
+
+@dataclass
+class PlayerEffectSelection:
+    shrinkage: float
+    mapping: float
+    half_life: float
+    summary: pd.DataFrame
+
+
+def player_effect_grid(
+    scores_by_season: dict[int, pd.DataFrame],
+    residual_history: pd.DataFrame,
+    seasons: list[int],
+    *,
+    tau: float,
+    effect_scale: float,
+    candidates: list[tuple[float, float, float]],
+    n_sims: int = 2000,
+    n_draws: int = 256,
+    contender_count: int = simulate.DEFAULT_CONTENDERS,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Score historical-effect candidates on the requested seasons.
+
+    ``candidates`` are ``(shrinkage, mapping, half_life)`` triples; mapping
+    zero is the unadjusted baseline. Each candidate's adjustment for a season
+    is built only from seasons before it.
+    """
+    rows: list[dict] = []
+    for shrinkage, mapping, half_life in candidates:
+        for season in seasons:
+            if season not in scores_by_season:
+                continue
+            adjusted = history_effects.attach_player_effects(
+                scores_by_season[season],
+                residual_history,
+                season,
+                shrinkage=shrinkage,
+                mapping=mapping,
+                half_life=half_life,
+            )
+            match_nll = simulate.integrated_match_log_loss(
+                adjusted, tau, effect_scale, n_draws=n_draws, seed=seed
+            )
+            simulation = simulate.simulate_season(
+                adjusted, tau, effect_scale=effect_scale, n_sims=n_sims, seed=seed
+            )
+            metrics = simulate.season_metrics(simulation, contender_count=contender_count)
+            rows.append(
+                {
+                    "shrinkage": float(shrinkage),
+                    "mapping": float(mapping),
+                    "half_life": float(half_life),
+                    "season": int(season),
+                    "match_nll": match_nll,
+                    **metrics,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def select_player_effects(
+    grid: pd.DataFrame,
+    evidence_seasons: list[int],
+    *,
+    nll_weight: float = NLL_WEIGHT,
+    crps_weight: float = CRPS_WEIGHT,
+) -> PlayerEffectSelection:
+    """Select historical-effect settings using only the evidence seasons."""
+    subset = grid[grid["season"].isin(evidence_seasons)]
+    if subset.empty:
+        raise ValueError("no grid rows for the evidence seasons")
+    summary = subset.groupby(["shrinkage", "mapping", "half_life"], as_index=False).agg(
+        match_nll=("match_nll", "mean"), crps=("mean_crps_contenders", "mean")
+    )
+    summary = _standardise(summary, nll_weight, crps_weight)
+    best = summary.sort_values(["combined", "match_nll"]).iloc[0]
+    return PlayerEffectSelection(
+        shrinkage=float(best["shrinkage"]),
+        mapping=float(best["mapping"]),
+        half_life=float(best["half_life"]),
+        summary=summary,
+    )
+
+
+def rolling_player_effect_validation(
+    grid: pd.DataFrame,
+    *,
+    report_seasons: list[int],
+    min_evidence: int = MIN_EVIDENCE_SEASONS,
+    baseline_mapping: float = 0.0,
+) -> pd.DataFrame:
+    """Rolling selection of historical effects with a paired baseline per season.
+
+    The baseline for each season is the unadjusted candidate (mapping zero),
+    evaluated on the same season with the same seed, so the difference is the
+    effect of the adjustment rather than simulation noise.
+    """
+    all_seasons = sorted(int(season) for season in grid["season"].unique())
+    rows: list[dict] = []
+    for season in sorted(report_seasons):
+        evidence = [candidate for candidate in all_seasons if candidate < season]
+        if len(evidence) < min_evidence:
+            continue
+        selection = select_player_effects(grid, evidence)
+        adjusted = grid[
+            (grid["season"] == season)
+            & (grid["shrinkage"] == selection.shrinkage)
+            & (grid["mapping"] == selection.mapping)
+            & (grid["half_life"] == selection.half_life)
+        ]
+        baseline = grid[(grid["season"] == season) & (grid["mapping"] == baseline_mapping)]
+        if adjusted.empty or baseline.empty:
+            continue
+        record = adjusted.iloc[0].to_dict()
+        base = baseline.iloc[0].to_dict()
+        record.update(
+            {
+                "shrinkage_selected": selection.shrinkage,
+                "mapping_selected": selection.mapping,
+                "half_life_selected": selection.half_life,
+                "evidence_seasons": len(evidence),
+                "baseline_crps_contenders": base["mean_crps_contenders"],
+                "baseline_coverage_90_contenders": base["coverage_90_contenders"],
+                "baseline_match_nll": base["match_nll"],
+                "delta_crps_contenders": (
+                    record["mean_crps_contenders"] - base["mean_crps_contenders"]
                 ),
             }
         )
