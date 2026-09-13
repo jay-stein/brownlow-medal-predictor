@@ -67,6 +67,12 @@ def pl_marginals(s: np.ndarray, tau: float = 1.0) -> np.ndarray:
 
     Returns an ``(n_players, 4)`` array whose columns are ``P(0), P(1), P(2),
     P(3)``.
+
+    Sequential denominators can underflow to zero for very sharp temperatures.
+    Terms with a zero denominator are dropped: they are either multiplied by a
+    zero weight (so contribute nothing) or belong to the exactly-two-positive-
+    weights case, where the finite margins are still zero. This keeps the
+    computation stable without perturbing the exact probabilities.
     """
     weights = pl_weights(s, tau)
     total = weights.sum()
@@ -75,14 +81,18 @@ def pl_marginals(s: np.ndarray, tau: float = 1.0) -> np.ndarray:
     p3 = weights / total
 
     # P(2 votes) = P(selected second)
-    inverse_remaining = 1.0 / (total - weights)
+    remaining = total - weights
+    inverse_remaining = np.zeros_like(weights)
+    positive = remaining > 0.0
+    inverse_remaining[positive] = 1.0 / remaining[positive]
     shared = float(np.sum(weights * inverse_remaining) / total)
     p2 = weights * (shared - weights * inverse_remaining / total)
 
     # P(1 vote) = P(selected third); see docstring for the derivation.
     denominator = total * (total - weights)[:, None] * (total - weights[:, None] - weights[None, :])
-    np.fill_diagonal(denominator, 1.0)
-    pair_terms = (weights[:, None] * weights[None, :]) / denominator
+    valid = denominator > 0.0
+    pair_terms = np.zeros_like(denominator)
+    pair_terms[valid] = (weights[:, None] * weights[None, :])[valid] / denominator[valid]
     np.fill_diagonal(pair_terms, 0.0)
     pair_total = float(pair_terms.sum())
     p1 = weights * (pair_total - pair_terms.sum(axis=1) - pair_terms.sum(axis=0))
