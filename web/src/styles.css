@@ -1278,6 +1278,62 @@ h1 em {
   border-radius: 2px;
 }
 
+.projection-bar .bar-expected {
+  position: absolute;
+  top: -1px;
+  width: 7px;
+  height: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 2px;
+  background: transparent;
+  transform: translateX(-3px);
+}
+
+.pace-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pace-chip.ahead {
+  color: #b5ecc6;
+  border: 1px solid rgba(122, 220, 150, 0.45);
+  background: rgba(122, 220, 150, 0.12);
+}
+
+.pace-chip.behind {
+  color: #ffc0b4;
+  border: 1px solid rgba(255, 150, 130, 0.45);
+  background: rgba(255, 150, 130, 0.12);
+}
+
+.count-prior {
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.count-rounds-label {
+  display: block;
+  margin: 8px 0 2px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.round-chip em {
+  font-style: normal;
+  opacity: 0.75;
+  margin-right: 4px;
+}
+
+.round-chip.hot {
+  color: var(--gold-pale);
+  font-weight: 700;
+}
+
 .count-meta {
   display: flex;
   align-items: center;

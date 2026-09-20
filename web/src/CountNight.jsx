@@ -330,8 +330,21 @@ export default function CountNight({ players, rounds, meta }) {
                   className="bar-fill"
                   style={{ left: `${position(low)}%`, width: `${Math.max(0, position(high) - position(low))}%` }}
                 />
-                <span className="bar-observed" style={{ left: `${position(observed)}%` }} />
-                <span className="bar-projected" style={{ left: `${position(projection.projected)}%` }} />
+                <span
+                  className="bar-expected"
+                  style={{ left: `${position(projection.priorThrough)}%` }}
+                  title={`model expected ${projection.priorThrough.toFixed(1)} by now`}
+                />
+                <span
+                  className="bar-observed"
+                  style={{ left: `${position(observed)}%` }}
+                  title={`votes entered: ${observed}`}
+                />
+                <span
+                  className="bar-projected"
+                  style={{ left: `${position(projection.projected)}%` }}
+                  title={`projected: ${projection.projected.toFixed(1)}`}
+                />
               </div>
               <div className="count-meta">
                 <label>
@@ -350,22 +363,46 @@ export default function CountNight({ players, rounds, meta }) {
                     }}
                   />
                 </label>
-                <span>
-                  model said {projection.priorThrough.toFixed(1)} by now · pace {signed(pace)} · final{" "}
-                  {projection.priorFinal.toFixed(1)}
+                <span
+                  className={pace >= 0 ? "pace-chip ahead" : "pace-chip behind"}
+                  title={`model expected ${projection.priorThrough.toFixed(1)} by ${
+                    roundList[roundIndex]?.label ?? "now"
+                  }`}
+                >
+                  {signed(pace)} vs model
+                </span>
+                <span className="count-prior" title="model's pre-season projection">
+                  pre-season {projection.priorFinal.toFixed(1)}
                 </span>
               </div>
               {remaining.some((value) => value > 0.05) ? (
-                <div className="count-rounds">
-                  {remaining.map((value, offset) =>
-                    value > 0.05 ? (
-                      <span className="round-chip" key={offset}>
-                        {roundList[roundIndex + 1 + offset]?.label ?? `+${offset + 1}`}{" "}
-                        {value.toFixed(1)}
-                      </span>
-                    ) : null
-                  )}
-                </div>
+                <>
+                  <span className="count-rounds-label">Expected votes, round by round</span>
+                  <div className="count-rounds">
+                    {remaining.map((value, offset) => {
+                      if (value <= 0.05) return null;
+                      const alpha = Math.min(0.4, 0.05 + value * 0.13);
+                      const hot = value >= 2.5;
+                      const label = roundList[roundIndex + 1 + offset]?.label ?? `+${offset + 1}`;
+                      return (
+                        <span
+                          key={offset}
+                          className={hot ? "round-chip hot" : "round-chip"}
+                          style={{
+                            background: `rgba(212, 175, 55, ${alpha.toFixed(3)})`,
+                            borderColor: hot
+                              ? "rgba(212, 175, 55, 0.65)"
+                              : "rgba(255, 255, 255, 0.1)",
+                          }}
+                          title={`${label}: model expects ${value.toFixed(1)} votes`}
+                        >
+                          <em>{label}</em>
+                          {value.toFixed(1)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </>
               ) : (
                 <p className="count-meta">No rounds left to project.</p>
               )}
