@@ -522,6 +522,7 @@ def forecast_export(
     metadata: dict | None = None,
     reports: dict[str, dict] | None = None,
     match_stats: dict[tuple[str, str], dict] | None = None,
+    events: dict[str, list[dict]] | None = None,
 ) -> dict:
     """Build a compact JSON-ready payload for the interactive web visualisation."""
     if simulation.rounds is None or simulation.cumulative_quantiles is None:
@@ -681,6 +682,11 @@ def forecast_export(
                         "goals": _rounded(stats.get("GOALS"), 0),
                         "coachVotes": _rounded(stats.get("COACH_VOTES"), 0),
                         "ratingPoints": _rounded(stats.get("RATINGPOINTS"), 1),
+                        "q4Goals": _rounded(stats.get("Q4_GOALS"), 0),
+                        "lateGoals": _rounded(stats.get("LATE_GOALS"), 0),
+                        "clutchScores": _rounded(stats.get("CLUTCH_SCORES"), 0),
+                        "firstGoal": stats.get("FIRST_GOAL") == 1,
+                        "lastGoal": stats.get("LAST_GOAL") == 1,
                     }
                 )
             triples = sorted(
@@ -707,6 +713,7 @@ def forecast_export(
                 "awayScore": int(match.away_score) if match.away_score is not None else None,
                 "votes": vote_rows,
                 "triples": triple_rows,
+                "events": (events or {}).get(match.match_id, []),
             }
             if reports and match.match_id in reports:
                 record["report"] = reports[match.match_id]

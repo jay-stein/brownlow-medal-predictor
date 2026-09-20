@@ -249,14 +249,24 @@ def test_forecast_export_includes_matches_and_reports():
         top=4,
         metadata={"season": 2024},
         reports={"m1": {"source": "test", "text": "A classic."}},
+        events={
+            "m1": [
+                {"p": 4, "s": 100, "h": 6, "a": 0, "v": 6, "side": "H", "type": "G", "player": "A"},
+                {"p": 4, "s": 300, "h": 6, "a": 1, "v": 1, "side": "A", "type": "B"},
+            ]
+        },
     )
     assert len(payload["matches"]) == 2
     match = payload["matches"][0]
     assert match["id"] == "m1"
-    assert {"home", "away", "votes", "triples"} <= set(match)
+    assert {"home", "away", "votes", "triples", "events"} <= set(match)
     assert len(match["votes"]) == 4
     assert match["triples"][0]["p"] > 0
     assert match["report"]["text"] == "A classic."
+    assert match["events"][0]["type"] == "G"
+    assert "player" not in match["events"][1]
+    assert "q4Goals" in match["votes"][0]
+    assert "clutchScores" in match["votes"][0]
     team = payload["teams"][0]
     assert team["expected"] > 0
     assert len(team["players"]) == 4

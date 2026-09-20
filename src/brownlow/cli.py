@@ -962,7 +962,17 @@ def run_forecast(args: argparse.Namespace) -> None:
     if args.web_json is not None:
         reports_path = paths.DATA_DIR / f"match_reports_{season}.json"
         reports = json.loads(reports_path.read_text()) if reports_path.exists() else None
-        stats_columns = ["DISPOSALS", "GOALS", "COACH_VOTES", "RATINGPOINTS"]
+        stats_columns = [
+            "DISPOSALS",
+            "GOALS",
+            "COACH_VOTES",
+            "RATINGPOINTS",
+            "Q4_GOALS",
+            "LATE_GOALS",
+            "CLUTCH_SCORES",
+            "FIRST_GOAL",
+            "LAST_GOAL",
+        ]
         season_stats = labelled[labelled["ROUND_YEAR"] == season]
         match_stats = (
             season_stats.set_index(["PROVIDERID", "PLAYER_PLAYER_PLAYER_PLAYERID"])[
@@ -971,12 +981,37 @@ def run_forecast(args: argparse.Namespace) -> None:
             if not season_stats.empty
             else {}
         )
+        momentum_events = momentum.load_events()
+        events_by_match: dict[str, list[dict]] = {}
+        if momentum_events is not None:
+            season_events = momentum_events[momentum_events["SEASON"] == season]
+            short_type = {"GOAL": "G", "BEHIND": "B", "RUSHED_BEHIND": "R"}
+            for provider_id, group in season_events.groupby("PROVIDERID", sort=False):
+                ordered = group.sort_values(["PERIOD", "PERIOD_SECONDS"], kind="stable")
+                events_by_match[str(provider_id)] = [
+                    {
+                        "p": int(row.PERIOD),
+                        "s": int(row.PERIOD_SECONDS),
+                        "h": int(row.AGG_HOME),
+                        "a": int(row.AGG_AWAY),
+                        "v": int(row.SCORE_VALUE),
+                        "side": "H" if row.HOME_AWAY == "HOME" else "A",
+                        "type": short_type.get(str(row.SCORE_TYPE), "B"),
+                        **(
+                            {"player": str(row.PLAYER_NAME).title()}
+                            if row.SCORE_TYPE == "GOAL" and row.PLAYER_NAME
+                            else {}
+                        ),
+                    }
+                    for row in ordered.itertuples(index=False)
+                ]
         payload = simulate.forecast_export(
             simulation,
             players,
             top=args.web_players,
             reports=reports,
             match_stats=match_stats,
+            events=events_by_match,
             metadata={
                 "season": season,
                 "model": model_key,

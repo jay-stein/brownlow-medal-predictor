@@ -1414,9 +1414,59 @@ h1 em {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.vote-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.clutch-badge {
+  font-style: normal;
+  font-size: 0.56rem;
+  line-height: 1.3;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--gold-light);
+  white-space: nowrap;
+}
+
+.momentum-worm {
+  display: block;
+  width: 100%;
+  height: 60px;
+  margin: 4px 0 2px;
+}
+
+.momentum-worm .worm-zero {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+}
+
+.momentum-worm .worm-quarter {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.momentum-worm .worm-q4 {
+  fill: rgba(212, 175, 55, 0.05);
+}
+
+.momentum-worm .worm-last10 {
+  fill: rgba(212, 175, 55, 0.09);
+}
+
+.momentum-worm .worm-clutch {
+  fill: #d4af37;
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 1;
 }
 
 .vote-player .dot {
