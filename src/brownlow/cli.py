@@ -10,9 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import (
-    afl_reports as reports_mod,
-)
-from . import (
+    afl_cfs,
     aflca,
     eligibility,
     ensemble,
@@ -27,6 +25,9 @@ from . import (
     scores,
     simulate,
     validation,
+)
+from . import (
+    afl_reports as reports_mod,
 )
 
 
@@ -493,6 +494,69 @@ def run_player_effects(args: argparse.Namespace) -> None:
         f"half_life={selection.half_life}"
     )
     print(f"\nWrote {grid_path}, {table_path} and {selection_path}")
+
+
+def run_fetch_playbyplay(args: argparse.Namespace) -> None:
+    """Scrape official AFL scoring events (CFS matchItem) for the given seasons."""
+    labelled = pd.read_parquet(paths.PROCESSED_DIR / "labelled_player_games.parquet")
+    seasons = set(parse_seasons(args.seasons))
+    fixtures = (
+        labelled[labelled["ROUND_YEAR"].isin(seasons)][["ROUND_YEAR", "PROVIDERID"]]
+        .drop_duplicates()
+        .sort_values(["ROUND_YEAR", "PROVIDERID"])
+    )
+    output = Path(args.out)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    existing = None
+    done: set[str] = set()
+    if output.exists() and not args.refresh:
+        existing = pd.read_csv(output, dtype={"PROVIDERID": str})
+        done = set(existing["PROVIDERID"].astype(str))
+    pending = fixtures[~fixtures["PROVIDERID"].astype(str).isin(done)]
+    print(
+        f"{len(fixtures)} matches requested across {len(seasons)} seasons; "
+        f"{len(pending)} to fetch ({len(done)} already cached)"
+    )
+
+    token = afl_cfs.fetch_token()
+    frames: list[pd.DataFrame] = [existing] if existing is not None else []
+    fetched = 0
+    failures = 0
+    for index, (season, provider_id) in enumerate(pending.itertuples(index=False), start=1):
+        provider_id = str(provider_id)
+        try:
+            payload = afl_cfs.fetch_match_item(provider_id, token)
+        except afl_cfs.CfsError as error:
+            if error.status in (401, 403):
+                try:
+                    token = afl_cfs.fetch_token()
+                    payload = afl_cfs.fetch_match_item(provider_id, token)
+                except afl_cfs.CfsError as retry_error:
+                    failures += 1
+                    print(f"  {provider_id}: {retry_error}")
+                    continue
+            else:
+                failures += 1
+                print(f"  {provider_id}: {error}")
+                continue
+        frames.append(afl_cfs.parse_scoring_events(payload, provider_id, int(season)))
+        fetched += 1
+        if fetched % args.flush == 0:
+            pd.concat(frames, ignore_index=True).to_csv(output, index=False)
+        if index % 100 == 0 or index == len(pending):
+            print(f"  {index}/{len(pending)} matches (latest {provider_id})")
+        time.sleep(args.pause)
+
+    combined = (
+        pd.concat(frames, ignore_index=True)
+        if frames
+        else pd.DataFrame(columns=afl_cfs.EVENT_COLUMNS)
+    )
+    combined.to_csv(output, index=False)
+    print(f"\nwrote {len(combined)} events from {combined['PROVIDERID'].nunique()} matches")
+    if failures:
+        print(f"failed matches: {failures}")
+    print(f"output: {output}")
 
 
 def run_fetch_coaches(args: argparse.Namespace) -> None:
@@ -1032,6 +1096,15 @@ def main() -> None:
     coaches.add_argument("--out", default="data/aflca_votes.csv")
     coaches.add_argument("--pause", type=float, default=1.0, help="seconds between requests")
 
+    playbyplay = subparsers.add_parser(
+        "fetch-playbyplay", help="scrape official AFL scoring events (CFS matchItem)"
+    )
+    playbyplay.add_argument("--seasons", default="2012-2026")
+    playbyplay.add_argument("--out", default="data/playbyplay_2012_2026.csv")
+    playbyplay.add_argument("--pause", type=float, default=0.4, help="seconds between requests")
+    playbyplay.add_argument("--flush", type=int, default=25, help="checkpoint every N matches")
+    playbyplay.add_argument("--refresh", action="store_true", help="refetch cached matches")
+
     legacy_parser = subparsers.add_parser(
         "legacy-roll", help="roll the legacy Normal-draw ensemble baseline"
     )
@@ -1105,6 +1178,8 @@ def main() -> None:
         run_player_effects(args)
     elif args.command == "fetch-coaches":
         run_fetch_coaches(args)
+    elif args.command == "fetch-playbyplay":
+        run_fetch_playbyplay(args)
     elif args.command == "legacy-roll":
         run_legacy_roll(args)
     elif args.command == "ensemble-roll":

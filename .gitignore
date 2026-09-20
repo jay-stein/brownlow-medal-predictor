@@ -19,6 +19,7 @@ data/team_stats_*_fitzroy.csv
 data/brownlow_stats_*_fitzroy.csv
 data/player_details_*_afl.csv
 data/aflca_*.csv
+data/playbyplay_*.csv
 data/match_reports_*.json
 
 # Derived outputs
