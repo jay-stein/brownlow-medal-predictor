@@ -34,6 +34,50 @@ DEFAULT_CONTENDERS = 15
 DEFAULT_PATH_COUNT = 50
 TRIPLE_CANDIDATES = 40
 
+EFFECT_DISTRIBUTIONS = ("normal", "student_t", "mixture")
+MIXTURE_PROB = 0.1
+MIXTURE_MULTIPLIER = 3.0
+
+
+def draw_effects(
+    rng: np.random.Generator,
+    n_players: int,
+    n_sims: int,
+    scale: float,
+    distribution: str = "normal",
+    *,
+    t_df: float = 4.0,
+    mixture_prob: float = MIXTURE_PROB,
+    mixture_multiplier: float = MIXTURE_MULTIPLIER,
+) -> np.ndarray:
+    """Persistent player-season effects with the requested tail shape.
+
+    All options are normalised to the same variance ``scale**2`` so that
+    ``scale`` keeps its meaning and only the shape changes:
+
+    - ``normal``: Gaussian (the current production assumption).
+    - ``student_t``: Student-t with ``t_df`` degrees of freedom, rescaled to
+      unit variance; heavier tails and more mass near zero.
+    - ``mixture``: with probability ``mixture_prob`` a player draws from a
+      ``mixture_multiplier`` times wider Gaussian for the whole season,
+      otherwise the base scale; rescaled to unit variance. This models the
+      occasional breakout or collapse season.
+    """
+    if distribution == "student_t":
+        if t_df <= 2.0:
+            raise ValueError("student-t effects need t_df > 2 for finite variance")
+        raw = rng.standard_t(t_df, size=(n_players, n_sims))
+        return raw * (scale / np.sqrt(t_df / (t_df - 2.0)))
+    if distribution == "mixture":
+        variance = mixture_prob * mixture_multiplier**2 + (1.0 - mixture_prob)
+        base = rng.normal(0.0, scale / np.sqrt(variance), size=(n_players, n_sims))
+        heavy = rng.random((n_players, n_sims)) < mixture_prob
+        base[heavy] *= mixture_multiplier
+        return base
+    if distribution != "normal":
+        raise ValueError(f"unknown effect distribution: {distribution!r}")
+    return rng.normal(0.0, scale, size=(n_players, n_sims))
+
 
 @dataclass
 class SeasonSimulation:
@@ -225,6 +269,10 @@ def simulate_season(
     path_count: int = DEFAULT_PATH_COUNT,
     ineligible: set[str] | None = None,
     track_matches: bool = False,
+    effect_distribution: str = "normal",
+    effect_t_df: float = 4.0,
+    effect_mixture_prob: float = MIXTURE_PROB,
+    effect_mixture_multiplier: float = MIXTURE_MULTIPLIER,
 ) -> SeasonSimulation:
     """Simulate one season's count with a persistent player-season effect.
 
@@ -237,7 +285,16 @@ def simulate_season(
     eligible = eligible_mask(players, ineligible)
     rng = np.random.default_rng(seed)
     if effect_scale > 0:
-        effects = rng.normal(0.0, effect_scale, size=(n_players, n_sims))
+        effects = draw_effects(
+            rng,
+            n_players,
+            n_sims,
+            effect_scale,
+            effect_distribution,
+            t_df=effect_t_df,
+            mixture_prob=effect_mixture_prob,
+            mixture_multiplier=effect_mixture_multiplier,
+        )
     else:
         effects = np.zeros((n_players, n_sims))
 
@@ -411,6 +468,10 @@ def integrated_match_log_loss(
     effect_scale: float = 0.0,
     n_draws: int = 256,
     seed: int = 42,
+    effect_distribution: str = "normal",
+    effect_t_df: float = 4.0,
+    effect_mixture_prob: float = MIXTURE_PROB,
+    effect_mixture_multiplier: float = MIXTURE_MULTIPLIER,
 ) -> float:
     """Mean NLL of observed triples, integrating over persistent player effects.
 
@@ -424,7 +485,16 @@ def integrated_match_log_loss(
         return float("nan")
     rng = np.random.default_rng(seed)
     if effect_scale > 0.0:
-        effects = rng.normal(0.0, effect_scale, size=(len(players), n_draws))
+        effects = draw_effects(
+            rng,
+            len(players),
+            n_draws,
+            effect_scale,
+            effect_distribution,
+            t_df=effect_t_df,
+            mixture_prob=effect_mixture_prob,
+            mixture_multiplier=effect_mixture_multiplier,
+        )
     else:
         effects = np.zeros((len(players), n_draws))
     losses = []

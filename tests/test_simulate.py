@@ -260,3 +260,39 @@ def test_forecast_export_includes_matches_and_reports():
     team = payload["teams"][0]
     assert team["expected"] > 0
     assert len(team["players"]) == 4
+
+
+def test_draw_effects_shapes_share_variance_but_differ_in_tails():
+    rng = np.random.default_rng(0)
+    normal = simulate.draw_effects(rng, 5000, 4, 0.5, "normal")
+    student = simulate.draw_effects(rng, 5000, 4, 0.5, "student_t", t_df=4.0)
+    mixture = simulate.draw_effects(
+        rng, 5000, 4, 0.5, "mixture", mixture_prob=0.1, mixture_multiplier=3.0
+    )
+    for sample in (normal, student, mixture):
+        assert sample.std() == pytest.approx(0.5, rel=0.05)
+    # Same variance with heavier tails implies more mass near zero.
+    assert np.abs(student).mean() < np.abs(normal).mean()
+    assert np.abs(mixture).mean() < np.abs(normal).mean()
+    wide_share = (np.abs(mixture) > 1.0).mean()
+    assert 0.03 < wide_share < 0.08
+
+
+def test_draw_effects_rejects_unknown_distribution():
+    rng = np.random.default_rng(0)
+    with pytest.raises(ValueError):
+        simulate.draw_effects(rng, 4, 2, 0.5, "cauchy")
+
+
+def test_simulate_season_accepts_student_t_effects():
+    simulation = simulate.simulate_season(
+        _season_frame(),
+        tau=1.0,
+        effect_scale=0.3,
+        n_sims=50,
+        seed=3,
+        effect_distribution="student_t",
+        effect_t_df=4.0,
+    )
+    assert simulation.totals.shape == (4, 50)
+    assert (simulation.totals.sum(axis=0) == 6).all()

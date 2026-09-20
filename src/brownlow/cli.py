@@ -56,6 +56,8 @@ def run_audit() -> None:
     table = features.add_season_aggregates(table)
     crosswalk = ingest.build_crosswalk(player_stats, votes)
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
+    labelled = ingest.attach_match_context(labelled, votes)
+    labelled = features.add_quarter_context(labelled)
 
     crosswalk.to_csv(paths.PROCESSED_DIR / "player_crosswalk.csv", index=False)
     audit["by_season"].to_csv(paths.PROCESSED_DIR / "label_audit_by_season.csv", index=False)
@@ -276,22 +278,30 @@ def run_calibrate_joint(args: argparse.Namespace) -> None:
         n_draws=args.n_draws,
         contender_count=args.contenders,
         seed=args.seed,
+        effect_distribution=args.effect_distribution,
+        effect_t_df=args.effect_t_df,
+        effect_mixture_prob=args.effect_mixture_prob,
+        effect_mixture_multiplier=args.effect_mixture_multiplier,
     )
 
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    grid_path = output_dir / f"joint_grid_{args.model}.csv"
+    grid_path = output_dir / f"joint_grid_{args.model}{args.tag}.csv"
     grid.to_csv(grid_path, index=False)
 
     tune_seasons = parse_seasons(args.tune_seasons)
     selection = validation.select_joint_params(grid, tune_seasons)
-    selection_path = output_dir / f"joint_selection_{args.model}.json"
+    selection_path = output_dir / f"joint_selection_{args.model}{args.tag}.json"
     selection_path.write_text(
         json.dumps(
             {
                 "tau": selection.tau,
                 "effect_scale": selection.effect_scale,
                 "model_key": args.model,
+                "effect_distribution": args.effect_distribution,
+                "effect_t_df": args.effect_t_df,
+                "effect_mixture_prob": args.effect_mixture_prob,
+                "effect_mixture_multiplier": args.effect_mixture_multiplier,
                 "selection_rule": (
                     "equal-weight z(effect-integrated match NLL) + "
                     "z(contender CRPS), tie-break lower NLL"
@@ -329,7 +339,9 @@ def run_calibrate_joint(args: argparse.Namespace) -> None:
 
 def run_rolling_backtest(args: argparse.Namespace) -> None:
     """Fully rolling per-season validation from a saved joint grid."""
-    grid_path = paths.PROCESSED_DIR / "evaluation" / f"joint_grid_{args.model}.csv"
+    grid_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"joint_grid_{args.model}{args.tag}.csv"
+    )
     if not grid_path.exists():
         raise SystemExit(
             f"missing {grid_path}: run `calibrate-joint --model {args.model}` first"
@@ -355,6 +367,10 @@ def run_rolling_backtest(args: argparse.Namespace) -> None:
                 n_sims=args.n_sims,
                 seed=args.seed,
                 ineligible=ineligible,
+                effect_distribution=args.effect_distribution,
+                effect_t_df=args.effect_t_df,
+                effect_mixture_prob=args.effect_mixture_prob,
+                effect_mixture_multiplier=args.effect_mixture_multiplier,
             )
             metrics = simulate.season_metrics(
                 simulation, contender_count=args.contenders, ineligible=ineligible
@@ -365,7 +381,7 @@ def run_rolling_backtest(args: argparse.Namespace) -> None:
             table.loc[index, "n_ineligible"] = len(ineligible)
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"rolling_backtest_{args.model}.csv"
+    output_path = output_dir / f"rolling_backtest_{args.model}{args.tag}.csv"
     table.to_csv(output_path, index=False)
 
     columns = [column for column in validation.ROLLING_COLUMNS if column in table.columns]
@@ -886,6 +902,19 @@ def run_forecast(args: argparse.Namespace) -> None:
         print(f"Wrote web visualisation data to {web_path}")
 
 
+def _add_effect_shape_arguments(parser: argparse.ArgumentParser) -> None:
+    """Persistent-effect distribution options plus an output-file tag."""
+    parser.add_argument(
+        "--effect-distribution", choices=simulate.EFFECT_DISTRIBUTIONS, default="normal"
+    )
+    parser.add_argument("--effect-t-df", type=float, default=4.0)
+    parser.add_argument("--effect-mixture-prob", type=float, default=simulate.MIXTURE_PROB)
+    parser.add_argument(
+        "--effect-mixture-multiplier", type=float, default=simulate.MIXTURE_MULTIPLIER
+    )
+    parser.add_argument("--tag", default="", help="suffix for evaluation output files")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="brownlow")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -936,6 +965,7 @@ def main() -> None:
     joint.add_argument("--contenders", type=int, default=15)
     joint.add_argument("--seed", type=int, default=42)
     joint.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+    _add_effect_shape_arguments(joint)
 
     rolling = subparsers.add_parser(
         "rolling-backtest", help="fully rolling per-season validation from a saved joint grid"
@@ -946,6 +976,7 @@ def main() -> None:
     rolling.add_argument("--contenders", type=int, default=15)
     rolling.add_argument("--seed", type=int, default=42)
     rolling.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+    _add_effect_shape_arguments(rolling)
 
     player_effects = subparsers.add_parser(
         "player-effects", help="grid-search partially pooled historical player effects"

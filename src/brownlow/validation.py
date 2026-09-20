@@ -60,12 +60,17 @@ def joint_calibration_grid(
     n_draws: int = 256,
     contender_count: int = simulate.DEFAULT_CONTENDERS,
     seed: int = 42,
+    effect_distribution: str = "normal",
+    effect_t_df: float = 4.0,
+    effect_mixture_prob: float = simulate.MIXTURE_PROB,
+    effect_mixture_multiplier: float = simulate.MIXTURE_MULTIPLIER,
 ) -> pd.DataFrame:
     """Score the joint (tau, scale) grid on the requested seasons.
 
     All candidates for a season share the same effect draws and simulation
     seed, so differences are due to the parameters rather than Monte Carlo
-    noise.
+    noise. The persistent-effect distribution shape is held fixed and recorded
+    on every row.
     """
     rows: list[dict] = []
     for tau in tau_values:
@@ -75,10 +80,26 @@ def joint_calibration_grid(
                     continue
                 frame = scores_by_season[season]
                 match_nll = simulate.integrated_match_log_loss(
-                    frame, float(tau), float(scale), n_draws=n_draws, seed=seed
+                    frame,
+                    float(tau),
+                    float(scale),
+                    n_draws=n_draws,
+                    seed=seed,
+                    effect_distribution=effect_distribution,
+                    effect_t_df=effect_t_df,
+                    effect_mixture_prob=effect_mixture_prob,
+                    effect_mixture_multiplier=effect_mixture_multiplier,
                 )
                 simulation = simulate.simulate_season(
-                    frame, float(tau), effect_scale=float(scale), n_sims=n_sims, seed=seed
+                    frame,
+                    float(tau),
+                    effect_scale=float(scale),
+                    n_sims=n_sims,
+                    seed=seed,
+                    effect_distribution=effect_distribution,
+                    effect_t_df=effect_t_df,
+                    effect_mixture_prob=effect_mixture_prob,
+                    effect_mixture_multiplier=effect_mixture_multiplier,
                 )
                 metrics = simulate.season_metrics(simulation, contender_count=contender_count)
                 rows.append(
@@ -86,6 +107,10 @@ def joint_calibration_grid(
                         "tau": float(tau),
                         "effect_scale": float(scale),
                         "season": int(season),
+                        "effect_distribution": effect_distribution,
+                        "effect_t_df": float(effect_t_df),
+                        "effect_mixture_prob": float(effect_mixture_prob),
+                        "effect_mixture_multiplier": float(effect_mixture_multiplier),
                         "match_nll": match_nll,
                         **metrics,
                     }

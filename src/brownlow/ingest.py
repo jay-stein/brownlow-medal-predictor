@@ -354,6 +354,55 @@ def attach_labels(
     return labelled, audit
 
 
+def attach_match_context(
+    feature_table: pd.DataFrame,
+    votes: pd.DataFrame,
+) -> pd.DataFrame:
+    """Attach match-level context from AFL Tables to a player-game table.
+
+    Adds per-quarter team scores (from the goal/behind columns), the number of
+    field umpires (3 before 2023, 4 from 2023) and the umpire names. The join
+    reuses the fixture key that :func:`attach_labels` uses, so it applies to
+    every player-game including the unlabelled forecast season.
+    """
+    df = normalise_columns(votes)
+    season = df["SEASON"]
+    if isinstance(season, pd.DataFrame):
+        season = season.iloc[:, 0]
+
+    context = pd.DataFrame(
+        {
+            "match_key": _match_key(df["HOME_TEAM"], df["AWAY_TEAM"]),
+            "game_date": pd.to_datetime(df["DATE"], errors="coerce").dt.date,
+            "HOME_Q1": 6 * df["HQ1G"].fillna(0) + df["HQ1B"].fillna(0),
+            "HOME_Q2": 6 * df["HQ2G"].fillna(0) + df["HQ2B"].fillna(0),
+            "HOME_Q3": 6 * df["HQ3G"].fillna(0) + df["HQ3B"].fillna(0),
+            "HOME_Q4": 6 * df["HQ4G"].fillna(0) + df["HQ4B"].fillna(0),
+            "AWAY_Q1": 6 * df["AQ1G"].fillna(0) + df["AQ1B"].fillna(0),
+            "AWAY_Q2": 6 * df["AQ2G"].fillna(0) + df["AQ2B"].fillna(0),
+            "AWAY_Q3": 6 * df["AQ3G"].fillna(0) + df["AQ3B"].fillna(0),
+            "AWAY_Q4": 6 * df["AQ4G"].fillna(0) + df["AQ4B"].fillna(0),
+            "UMPIRE_COUNT": df[["UMPIRE_1", "UMPIRE_2", "UMPIRE_3", "UMPIRE_4"]]
+            .notna()
+            .sum(axis=1),
+            "UMPIRE_1": df["UMPIRE_1"].astype("string"),
+            "UMPIRE_2": df["UMPIRE_2"].astype("string"),
+            "UMPIRE_3": df["UMPIRE_3"].astype("string"),
+            "UMPIRE_4": df["UMPIRE_4"].astype("string"),
+            "SEASON": pd.to_numeric(season, errors="coerce").astype("Int64"),
+            "ROUND": pd.to_numeric(df["ROUND"], errors="coerce").astype("Int64"),
+        }
+    ).drop_duplicates(subset=["match_key", "game_date"])
+    context["fixture_key"] = _fixture_key(context["match_key"], context["game_date"])
+    context = context.drop(columns=["match_key", "game_date"])
+
+    out = feature_table.copy()
+    out["match_key"] = _match_key(out["HOME_TEAM_NAME"], out["AWAY_TEAM_NAME"])
+    out["fixture_key"] = _fixture_key(out["match_key"], out["GAME_DATE"])
+    out = out.merge(context, on="fixture_key", how="left", suffixes=("", "_context"))
+    return out.drop(columns=["match_key", "fixture_key"])
+
+
 def summarise_audit(labelled: pd.DataFrame, crosswalk: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Per-season label coverage plus crosswalk outcome tables."""
     status_counts = labelled.groupby(["ROUND_YEAR", "LABEL_STATUS"]).size().unstack(fill_value=0)
