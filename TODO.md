@@ -44,7 +44,15 @@ Kept as an experiment behind the model key; not promoted.
 
 - [ ] Shrunken umpire-crew tendency (umpire identity is in the raw data 2012-2025, unused)
 - [ ] Coach-vote dispersion as a match-level temperature modifier
-- [ ] Joint (tau, sigma, alpha-mapping) selection of the historical-effect strength
+- [x] Joint (tau, sigma, alpha-mapping) selection tested and **rejected**: the fully joint grid picks
+      mapping 2 in every target season and loses to the current protocol on the rolling targets
+      (CRPS 2.57 vs 2.50, favourite 2/5 vs 3/5, winner P 0.28 vs 0.32, match NLL tied at 5.09). The
+      clean rolling effect selection independently picks mapping 4 in 7 of 8 seasons, so the fixed-m4
+      production choice is the one sustained by evidence. Grid kept at
+      `data/processed/evaluation/joint_effect_grid_ranking_season_t4.csv`.
+- [ ] Add shape flags to `player-effects` and rerun under Student-t(4) so the published rolling
+      record includes the effect adjustment (the joint grid suggests CRPS ~2.50 and 3/5 favourite
+      hits with mapping 4 applied, versus 2.63 / 2/5 in the effects-free table)
 - [ ] AFL Media Brownlow predictor as an external benchmark variant
 - [ ] ESPN play-by-play scraper (scoring plays, 2017+) and Q4 / late-Q3 momentum features
 
