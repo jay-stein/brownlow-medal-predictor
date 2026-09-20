@@ -171,7 +171,16 @@ export function MatchCard({ match, focusTeam = null }) {
           {(expanded ? triples : triples.slice(0, 1)).map((option, index) => (
             <p className="match-triple" key={index}>
               {index === 0 ? "Likeliest exact 3-2-1" : "Alternative"}:{" "}
-              {option.players.join(" / ")} ({pct(option.p, 1)})
+              {option.players.map((name, playerIndex) => {
+                const player = votes.find((vote) => vote.name === name);
+                return (
+                  <span className="triple-player" key={`${name}-${playerIndex}`}>
+                    {playerIndex > 0 ? " / " : ""}
+                    {player ? <TeamLogo team={player.team} size={11} /> : null} {name}
+                  </span>
+                );
+              })}{" "}
+              ({pct(option.p, 1)})
             </p>
           ))}
         </div>
