@@ -117,7 +117,7 @@ Training protocol:
 
 The coaches' votes are the one change with a clear signal; recency windows, recency weighting and the CBA ablation are all within noise of the baseline. Direct Plackett–Luce optimisation gives the best integrated match NLL (5.21 versus 5.24) but worse season CRPS and coverage, consistent with the review's caution that ranking quality and probability shape are different objectives. Combining the PL objective with coaches' votes is the natural next experiment.
 
-**Season-form and context features.** Leave-one-game-out season aggregates (per-game stat means, coach-vote totals/rate/rank, team win rate) improve rolling contender CRPS to 2.62 with the same favourite hit rate and a higher average winner probability (0.233 versus 0.217); the gain holds in four of the five rolling seasons. Chronological Elo, interstate travel and close-game flags are similar on CRPS (2.66) but over-cover 90% intervals (0.96). Combining both blocks is *worse* than either alone (2.67, one favourite hit), which suggests the two feature families substitute for each other rather than add. The season-aggregate variant is now the production model; context features remain a documented experiment. The full pipeline depends on post-season information (the same boundary the forecast already declares).
+**Season-form and context features.** Leave-one-game-out season aggregates (per-game stat means, coach-vote totals/rate/rank, team win rate) improve rolling contender CRPS to 2.62 with the same favourite hit rate and a higher average winner probability (0.233 versus 0.217); the gain holds in four of the five rolling seasons. Chronological Elo, interstate travel and close-game flags are similar on CRPS (2.66) but over-cover 90% intervals (0.96). Combining both blocks is *worse* than either alone (2.67, one favourite hit), which suggests the two feature families substitute for each other rather than add. The season-aggregate variant is now the production model (with heavy-tailed effects since §6); context features remain a documented experiment. The full pipeline depends on post-season information (the same boundary the forecast already declares).
 
 ## 6. Plackett–Luce allocation and temperature
 
@@ -130,6 +130,10 @@ The **temperature τ** controls sharpness and the **persistent-effect scale σ**
 - Both metrics are standardised across the grid and combined with predeclared equal weights, breaking ties toward lower match NLL. The production selection over 2015–2025 is **τ = 0.8, σ = 0.4** (integrated match-NLL optimum τ = 0.8, σ = 0.6; contender-CRPS optimum τ = 0.7, σ = 0.3).
 
 Under the effect-free likelihood the match-NLL and season-CRPS optima appeared to disagree on τ; integrating the effects removed most of that tension, leaving a small disagreement on σ only. A leak-free per-season τ by maximum likelihood on prior matches remains a useful diagnostic (0.60–0.75 through 2022, drifting toward 1.0 in 2023–2025; see §9).
+
+### Effect shape
+
+The **shape** of the persistent effects is itself a modelling choice. Holding (τ, σ) at the production values, replacing the Gaussian with a variance-normalised **Student-t (df = 4)** or a **10%/3× Gaussian mixture** changes the rolling record materially: contender CRPS improves from 2.684 to 2.628 and 90% coverage from 0.853 to 0.907, with the favourite hit rate unchanged (2 of 5) and the average winner probability moving from 0.241 to 0.232 (Student-t) or 0.225 (mixture). Re-calibrating the full grid under each shape selects the same production (τ = 0.8, σ = 0.4) and the two heavy-tailed options are statistically indistinguishable from each other (CRPS 2.628 versus 2.626; match NLL 5.112 versus 5.100). The Student-t(4) is adopted for parsimony; the mixture remains available through `--effect-distribution mixture`. The gain concentrates in 2023 (CRPS 2.37 → 2.05), the season whose count produced an extreme outcome the Gaussian could not generate often enough, and it survives in 2024 and 2025. Rolling records in §8 and the 2026 forecast use the Student-t(4) effects.
 
 ## 7. Uncertainty: fixing the original overconfidence
 
@@ -148,10 +152,10 @@ That design is structurally overconfident, for four reasons:
 
 - **Discrete allocation, not Gaussian noise.** Every simulation awards exactly 3-2-1 per match via Plackett–Luce. The noise model is the vote process itself, so the constant-sum competition and discreteness are structural, not approximate.
 - **Calibrated temperature, but the gain is the score generator.** On the ranking scores, allocation log-loss is already 4.4–6.0 nats at τ=1 against 11.3–11.4 for a uniform allocation; rescaling alone moves it by only −0.20 to +0.29 nats per season. The large reduction from 8.5–9.6 nats (τ=1) to 7.5–7.6 belongs to the earlier pseudo-Huber regression baseline, whose score scale differs; that improvement is attributable to the score generator, not the temperature. τ and σ are now selected jointly on effect-integrated match NLL and contender CRPS (§6).
-- **Persistent player-season effects.** Each simulation draws one deviation `b_p ~ N(0, σ²)` per player and holds it for **all** of their matches: `u = s + b`. The scale is jointly calibrated (σ = 0.5 in production). On top of that, a **partially pooled historical player effect** `α_p` is added: a shrunken average of prior-season residuals — observed votes minus the model's own Plackett–Luce expectation — so a player the model chronically underrates is nudged up without double-counting raw vote totals. Shrinkage is in games and the residual history can decay; production uses 100 games with no decay and a mapping of 4 utility units per vote. On rolling out-of-sample seasons the effect improved contender CRPS in **7 of 8 seasons** (mean −0.16).
-- **Simulation, then rolling validation.** For each target season the whole procedure is reproduced before its result is used: score model trained on earlier labels, τ/σ/α selected only on earlier out-of-sample seasons, then the season forecast once. Over 2021–2025 the production model's contender 90% intervals covered **92%** of observed totals (season range 87–100%) and 50% intervals covered **57%** (27–73%); the favourite won 2 of 5 and the eventual winner averaged a **23.3%** prior probability. Season-by-season coverage is reported rather than pooled.
+- **Persistent player-season effects.** Each simulation draws one deviation per player and holds it for **all** of their matches: `u = s + b`. Production uses a variance-normalised **Student-t distribution with 4 degrees of freedom** (σ = 0.4): heavier tails fit the rolling seasons better than a Gaussian at the same scale (CRPS 2.63 versus 2.68, 90% coverage 0.91 versus 0.85), and a 10%/3× mixture is statistically equivalent. On top of that, a **partially pooled historical player effect** `α_p` is added: a shrunken average of prior-season residuals — observed votes minus the model's own Plackett–Luce expectation — so a player the model chronically underrates is nudged up without double-counting raw vote totals. Shrinkage is in games and the residual history can decay; production uses 100 games with no decay and a mapping of 4 utility units per vote. On rolling out-of-sample seasons the effect improved contender CRPS in **7 of 8 seasons** (mean −0.16).
+- **Simulation, then rolling validation.** For each target season the whole procedure is reproduced before its result is used: score model trained on earlier labels, τ/σ/α selected only on earlier out-of-sample seasons, then the season forecast once. Over 2021–2025 the production model's contender 90% intervals covered **91%** of observed totals (season range 73–100%) and 50% intervals covered **52%** (13–73%); the favourite won 2 of 5 and the eventual winner averaged a **23.2%** prior probability. Season-by-season coverage is reported rather than pooled.
 - **Award-stage eligibility.** Suspended players are excluded from outright and joint-first determination (the next eligible player wins), while their simulated votes still count in the tally and affect everyone's totals. The 2012–2025 ineligible leading vote-getters are committed from the Wikipedia Brownlow articles (Fyfe 2014, Dangerfield 2017, Heeney 2024, and six others), and the 2026 list (32 players) from the published MRO tracker.
-- **Sensitivity, not a single number.** Every forecast is reported across a small set of defensible specifications. For 2026, Nick Daicos's first-or-joint probability is 91.6% at the calibrated σ = 0.4 and spans 72–96% across σ = 0.3–0.7.
+- **Sensitivity, not a single number.** Every forecast is reported across a small set of defensible specifications. For 2026, Nick Daicos's first-or-joint probability is 90.3% at the calibrated σ = 0.4 and spans 70–95% across σ = 0.3–0.7.
 - **Quantiles, not extrema.** Reports use median, 50% and 90% intervals; simulated min/max were removed because they are unstable and widen with simulation count.
 
 ### What is still not modelled
@@ -164,16 +168,16 @@ Model-parameter uncertainty (uncertainty about the fitted score function itself)
 - **Reporting split.** Seasons 2015–2020 informed the original redesign and are development evidence; 2021–2025 are the rolling records of the final procedure; **2026 is the only live out-of-sample target** (votes pending). The earlier stats-only backtest is superseded by the variant comparison in §5 and the rolling table below.
 - **Metrics**: effect-integrated match NLL, multiclass Brier for `P(0/1/2/3)`, top-1 hit rate, top-3 slot overlap, reliability of `P(polls)`, season CRPS, interval coverage and width, and eligibility-aware award hit rates.
 
-Rolling records for the production `ranking_coaches` model:
+Rolling records for the production `ranking_season` model (Student-t(4) effects; grid on 2015–2025 evidence, each target season selecting its own parameters from earlier seasons):
 
 | Season | τ, σ | Contender CRPS | 90% coverage | 50% coverage | Favourite won | Winner prior P |
 |--------|------|----------------|--------------|--------------|---------------|----------------|
-| 2021 | 0.7, 0.4 | 2.78 | 0.93 | 0.53 | yes | 45.5% |
-| 2022 | 0.7, 0.4 | 1.89 | 0.93 | 0.67 | no | 17.4% |
-| 2023 | 0.7, 0.4 | 2.09 | 1.00 | 0.73 | no | 2.5% |
-| 2024 | 0.7, 0.4 | 3.58 | 0.87 | 0.27 | yes | 48.5% |
-| 2025 | 0.7, 0.4 | 2.77 | 0.87 | 0.67 | no | 2.6% |
-| **Mean** | | **2.62** | **0.92** | **0.57** | **2/5** | **23.3%** |
+| 2021 | 0.7, 0.4 | 2.78 | 0.93 | 0.47 | yes | 44.0% |
+| 2022 | 0.7, 0.5 | 1.87 | 1.00 | 0.73 | no | 17.0% |
+| 2023 | 0.8, 0.3 | 2.05 | 0.93 | 0.53 | no | 1.9% |
+| 2024 | 0.8, 0.3 | 3.79 | 0.73 | 0.13 | yes | 49.5% |
+| 2025 | 0.8, 0.4 | 2.65 | 0.93 | 0.73 | no | 3.8% |
+| **Mean** | | **2.63** | **0.91** | **0.52** | **2/5** | **23.2%** |
 
 Per-match top-1 accuracy is 51–67%. The presented results do **not** establish an irreducible ceiling for umpire voting; the design goal is calibrated probabilities, not clairvoyance.
 
@@ -184,16 +188,16 @@ The first-generation design was reconstructed faithfully and rolled with the sam
 | Approach | Contender CRPS | 90% coverage | 50% coverage | Favourite won | Winner prior P | Match NLL | Rank-sum |
 |---|---|---|---|---|---|---|---|
 | Legacy (100-model Normal draws) | 4.77 | 0.20 | 0.09 | 0/5 | 0.000 | n/a | 12 |
-| **Current production** (`ranking_season`) | **2.62** | **0.92** | 0.57 | **2/5** | **0.233** | **5.23** | **5** |
+| **Current production** (`ranking_season`, Student-t(4) effects) | **2.63** | **0.91** | **0.52** | **2/5** | **0.232** | **5.11** | **5** |
 | Stacking ensemble | 2.65 | 0.93 | 0.57 | 1/5 | 0.186 | 5.26 | 7 |
 
-The legacy baseline is overconfident in exactly the way the redesign diagnosed: a fifth of its 90% intervals covered and none of its five favourites won. Both redesign-era approaches are in a different class. The season-form production model now edges the ensemble on CRPS and match NLL as well as the top-of-count signal; the ensemble's coverage is a touch closer at 90%. A hindsight oracle that picks the best ensemble weights per season reaches CRPS 2.37, so **selection quality, not the member pool, is the binding constraint** — worth revisiting once more medal outcomes accumulate.
+The legacy baseline is overconfident in exactly the way the redesign diagnosed: a fifth of its 90% intervals covered and none of its five favourites won. Both redesign-era approaches are in a different class. The season-form production model edges the ensemble on CRPS and match NLL as well as the top-of-count signal; the ensemble's coverage is a touch closer at 90% (the comparison was run under Gaussian effects; the adopted Student-t(4) shape moves the production row by about 0.01 CRPS and does not change the ordering). A hindsight oracle that picks the best ensemble weights per season reaches CRPS 2.37, so **selection quality, not the member pool, is the binding constraint** — worth revisiting once more medal outcomes accumulate.
 
 ## 9. Modelling weak points
 
 1. **Context-free utilities.** `s_{p,g}` depends on the player's own features (plus team shares); it does not see the other players in the match. The teammate competition is enforced at the allocation layer but not learned conditionally. Feeding teammate/opponent utility summaries into the score model (two-stage) or a conditional-logit design is the principled extension.
 2. **Compositional errors.** Because each match allocates exactly 6 votes, errors are zero-sum within the match: overrating one player underrates another. The simulation also draws player effects independently, ignoring shared within-match model error.
-3. **Extreme seasons still beat the centre.** Historical player effects are now learned from prior-season residuals and improved 7 of 8 rolling seasons, but the model remains conservative: 2024 Cripps (45 votes) and 2025 Rowell (39) were ranked 2nd and 9th before the count and 2024's 50% coverage fell to 0.20. Strength-dependent overdispersion or a volatility-aware prior would target this directly.
+3. **Extreme seasons still beat the centre.** Historical player effects are learned from prior-season residuals and improved 7 of 8 rolling seasons, and heavy-tailed effects (adopted in §6) lifted 2023's CRPS from 2.37 to 2.05, but the model remains conservative: 2024 Cripps (45 votes) was ranked 1st before the count yet 2024's 50% coverage fell to 0.13 because the *magnitude* of the inflation was outside every specification. Strength-dependent overdispersion or a volatility-aware prior would target this directly, and 2025 Rowell (rank 5 by win probability) is the same failure in a different direction.
 4. **Joint calibration removed most of the temperature tension.** With effect-integrated match probabilities, both the match-NLL and season-CRPS optima prefer τ ≈ 0.6–0.7 and differ only in σ (0.6 versus 0.3). The residual disagreement is genuine evidence about how much season-level spread is real rather than a tuning defect.
 5. **No model-parameter uncertainty.** One trained model; no bootstrap ensemble; common bias and temporal drift are probed only via sensitivity analysis.
 6. **Plackett–Luce assumptions.** IIA/restrictive substitution and no context effects. It is a clean, budget-exact baseline; alternatives (Bradley–Terry variants, conditional logit, dependent-error rank models) are testable upgrades.
@@ -211,6 +215,7 @@ The legacy baseline is overconfident in exactly the way the redesign diagnosed: 
 | Score generator | match-grouped LambdaMART + AFLCA coaches' votes + leave-one-game-out season aggregates (139 features), trained 2012–2025 on 123,087 player-games |
 | Temperature τ | 0.8 (joint calibration on 2015–2025 out-of-sample seasons) |
 | Persistent effect scale σ | 0.4 (joint optimum; integrated-NLL optimum 0.6, contender-CRPS optimum 0.3) |
+| Persistent effect shape | variance-normalised Student-t with 4 degrees of freedom (10%/3× mixture statistically equivalent) |
 | Historical player effects | shrinkage 100 games, mapping 4 utility units per vote, no recency decay |
 | Eligibility | applied: 32 players suspended during the 2026 home-and-away season excluded from win probabilities |
 | Simulations | 10,000 Plackett–Luce counts |

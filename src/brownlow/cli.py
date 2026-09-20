@@ -728,14 +728,25 @@ def run_forecast(args: argparse.Namespace) -> None:
     tau, tau_matches = evaluate.fit_pooled_tau(prior_frames)
     tau_source = f"leak-free MLE on {tau_matches} earlier matches"
 
-    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{model_key}.json"
+    joint_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{model_key}{args.tag}.json"
+    )
     calibration_path = paths.PROCESSED_DIR / "evaluation" / f"calibrated_effect_scale_{model_key}.json"
+    effect_shape = {
+        "effect_distribution": args.effect_distribution,
+        "effect_t_df": args.effect_t_df,
+        "effect_mixture_prob": args.effect_mixture_prob,
+        "effect_mixture_multiplier": args.effect_mixture_multiplier,
+    }
     if args.effect_scale is not None:
         effect_scale = args.effect_scale
     elif joint_path.exists():
         joint = json.loads(joint_path.read_text())
         tau = float(joint["tau"])
         effect_scale = float(joint["effect_scale"])
+        for key in effect_shape:
+            if key in joint:
+                effect_shape[key] = joint[key]
         tau_source = (
             f"joint calibration on seasons {joint['tune_seasons'][0]}-{joint['tune_seasons'][-1]}"
         )
@@ -784,6 +795,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         path_count=args.web_paths,
         ineligible=ineligible,
         track_matches=args.web_json is not None,
+        **effect_shape,
     )
     players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
 
@@ -799,6 +811,7 @@ def run_forecast(args: argparse.Namespace) -> None:
                 n_sims=args.n_sims,
                 seed=args.seed,
                 ineligible=ineligible,
+                **effect_shape,
             )
             subset = scenario.players[
                 [
@@ -889,6 +902,10 @@ def run_forecast(args: argparse.Namespace) -> None:
                 "tauMatches": tau_matches,
                 "tauSource": tau_source,
                 "effectScale": effect_scale,
+                "effectDistribution": effect_shape["effect_distribution"],
+                "effectTdf": effect_shape["effect_t_df"],
+                "effectMixtureProb": effect_shape["effect_mixture_prob"],
+                "effectMixtureMultiplier": effect_shape["effect_mixture_multiplier"],
                 "playerEffect": player_effect,
                 "nIneligible": len(ineligible),
                 "nSims": args.n_sims,
@@ -1056,6 +1073,7 @@ def main() -> None:
     forecast.add_argument("--max-rounds", type=int, default=3000)
     forecast.add_argument("--early-stopping", type=int, default=100)
     forecast.add_argument("--seed", type=int, default=42)
+    _add_effect_shape_arguments(forecast)
 
     args = parser.parse_args()
     if args.command == "audit":

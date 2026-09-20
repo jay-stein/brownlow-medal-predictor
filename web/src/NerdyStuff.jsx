@@ -1,16 +1,16 @@
 const ROLLING = [
-  ["2021", "2.78", "0.93", "0.53", "yes", "45.5%"],
-  ["2022", "1.89", "0.93", "0.67", "no", "17.4%"],
-  ["2023", "2.09", "1.00", "0.73", "no", "2.5%"],
-  ["2024", "3.58", "0.87", "0.27", "yes", "48.5%"],
-  ["2025", "2.77", "0.87", "0.67", "no", "2.6%"],
+  ["2021", "2.78", "0.93", "0.47", "yes", "44.0%"],
+  ["2022", "1.87", "1.00", "0.73", "no", "17.0%"],
+  ["2023", "2.05", "0.93", "0.53", "no", "1.9%"],
+  ["2024", "3.79", "0.73", "0.13", "yes", "49.5%"],
+  ["2025", "2.65", "0.93", "0.73", "no", "3.8%"],
 ];
 
 const VARIANTS = [
   ["Legacy (100-model Normal draws)", "4.77", "0.20", "0/5", "0.000"],
   ["Coaches' votes only", "2.85", "0.88", "2/5", "0.217"],
   ["Stacking ensemble", "2.65", "0.93", "1/5", "0.186"],
-  ["Season form (production)", "2.62", "0.92", "2/5", "0.233"],
+  ["Season form (production, Student-t(4) effects)", "2.63", "0.91", "2/5", "0.232"],
   ["Elo / travel / close-game context", "2.66", "0.96", "2/5", "0.238"],
   ["Direct Plackett-Luce objective", "3.09", "0.85", "2/5", "0.216"],
 ];
@@ -90,7 +90,9 @@ export default function NerdyStuff({ meta }) {
             <li>
               <b>Calibration.</b> Temperature and persistent-effect scale are chosen jointly, with
               match likelihood integrated over the same player-season effects the simulator draws,
-              combined with season CRPS under a predeclared rule.
+              combined with season CRPS under a predeclared rule. The effect shape is variance-normalised
+              Student-t(4): heavier tails than a Gaussian fit the rolling seasons better (CRPS 2.63
+              versus 2.68, 90% coverage 0.91 versus 0.85).
             </li>
             <li>
               <b>Uncertainty.</b> One persistent player-season effect per player, plus a partially
@@ -133,11 +135,11 @@ export default function NerdyStuff({ meta }) {
               ))}
               <tr className="nerdy-total">
                 <td>Mean</td>
-                <td>2.62</td>
-                <td>0.92</td>
-                <td>0.57</td>
+                <td>2.63</td>
+                <td>0.91</td>
+                <td>0.52</td>
                 <td>2/5</td>
-                <td>23.3%</td>
+                <td>23.2%</td>
               </tr>
             </tbody>
             </table>
@@ -186,7 +188,8 @@ export default function NerdyStuff({ meta }) {
           <ul>
             <li>
               <b>Record vote inflation.</b> 2024 produced the highest count in history; the model's
-              centre for such seasons is still too low even after the historical player effects.
+              centre for such seasons is still too low even after the historical player effects and
+              heavy-tailed season effects.
             </li>
             <li>
               <b>Context-free utilities.</b> A player's score depends on their own features and team
@@ -222,6 +225,14 @@ export default function NerdyStuff({ meta }) {
             <li>
               <span>Persistent-effect scale</span>
               <b>{meta.effectScale ?? "-"}</b>
+            </li>
+            <li>
+              <span>Persistent-effect shape</span>
+              <b>
+                {meta.effectDistribution === "student_t"
+                  ? `Student-t(df=${meta.effectTdf ?? 4})`
+                  : (meta.effectDistribution ?? "Normal")}
+              </b>
             </li>
             <li>
               <span>Historical player effects</span>
