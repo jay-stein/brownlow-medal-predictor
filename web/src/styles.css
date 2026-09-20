@@ -1377,6 +1377,163 @@ h1 em {
   background: rgba(212, 175, 55, 0.14);
 }
 
+.count-control-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.round-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.round-stepper button {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.round-stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.round-select {
+  min-width: 150px;
+  min-height: 42px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.1);
+  color: var(--gold-pale);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.count-race-caption {
+  margin: 4px 0 8px;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.count-race {
+  max-width: 720px;
+  margin: 2px 0 16px;
+}
+
+.count-race svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.race-grid {
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 1;
+}
+
+.race-label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.race-now {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.race-value {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.count-race-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.count-race-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+@media (max-width: 720px) {
+  .count-controls {
+    gap: 8px;
+  }
+
+  .count-control-label {
+    display: none;
+  }
+
+  .round-stepper {
+    flex: 1 1 100%;
+  }
+
+  .round-select {
+    flex: 1;
+    min-height: 48px;
+    font-size: 1.15rem;
+  }
+
+  .round-stepper button {
+    width: 48px;
+    height: 48px;
+    font-size: 1.4rem;
+  }
+
+  .count-panel input,
+  .count-panel select,
+  .autocomplete input {
+    font-size: 16px;
+  }
+
+  .count-meta input {
+    width: 72px;
+    min-height: 40px;
+  }
+
+  .count-remove {
+    padding: 4px 10px;
+    font-size: 1.35rem;
+  }
+
+  .autocomplete {
+    max-width: none;
+  }
+
+  .autocomplete input {
+    padding: 11px 12px;
+  }
+
+  .autocomplete-option {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+  }
+
+  .count-race {
+    max-width: none;
+  }
+}
+
 /* Top 10 race */
 .race-panel {
   margin-top: 22px;
