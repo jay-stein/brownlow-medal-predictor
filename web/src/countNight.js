@@ -57,17 +57,25 @@ export function projectedPath(player, roundIndex, observed) {
   return path;
 }
 
-/** Funnel band around the projected path, widening with the rounds remaining. */
+/**
+ * Fan of uncertainty around the projected path: zero at the round you are up
+ * to (the total is known), widening with the rounds in between to the
+ * calibrated range for the final total. It answers "how unsure are we about
+ * the total at this point in the future?", so it grows as you look further
+ * ahead - unlike the final-total range, which shrinks as the count runs.
+ */
 export function projectionBand(player, roundIndex, observed, calibration) {
   const path = projectedPath(player, roundIndex, observed);
   if (!path.length) return { lower: [], upper: [] };
   const last = path.length - 1;
   const index = Math.min(Math.max(roundIndex, 0), last);
+  const finalHalf = quantileAt(calibration?.q90, last - index);
+  const span = Math.max(last - index, 1);
   const lower = path.map(() => null);
   const upper = path.map(() => null);
   for (let round = index; round <= last; round += 1) {
     if (path[round] === null) continue;
-    const half = quantileAt(calibration?.q90, last - round);
+    const half = finalHalf * Math.sqrt((round - index) / span);
     lower[round] = path[round] - half;
     upper[round] = path[round] + half;
   }

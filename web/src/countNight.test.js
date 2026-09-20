@@ -52,15 +52,18 @@ test("projected path joins the observed total to the remaining increments", () =
   assert.deepEqual(path, [null, 7, 11, 16]);
 });
 
-test("projection band tapers to zero at the final round", () => {
+test("projection fan widens from zero to the calibrated final range", () => {
   const calibration = { q90: [0, 2, 3, 4] };
   const band = projectionBand(player, 1, 7, calibration);
-  // round 1 has two rounds remaining -> q90[2] = 3
-  assert.equal(band.lower[1], 4);
-  assert.equal(band.upper[1], 10);
-  // final round: no uncertainty left
-  assert.equal(band.lower[3], 16);
-  assert.equal(band.upper[3], 16);
+  // At the current round the total is known: no width.
+  assert.equal(band.lower[1], 7);
+  assert.equal(band.upper[1], 7);
+  // Two rounds remain, so the final half-width is q90[2] = 3.
+  assert.equal(band.lower[3], 13);
+  assert.equal(band.upper[3], 19);
+  // Halfway out the width grows with sqrt of the distance.
+  const midHalf = (band.upper[2] - band.lower[2]) / 2;
+  assert.ok(Math.abs(midHalf - 3 * Math.sqrt(0.5)) < 1e-9);
   assert.equal(band.lower[0], null);
 });
 

@@ -1100,6 +1100,59 @@ h1 em {
 }
 
 /* Count Night */
+.count-head {
+  align-items: flex-start;
+}
+
+.count-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.count-title h2 {
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: 0.02em;
+  background: linear-gradient(100deg, #ffe9a8, #d4af37 40%, #fff6cf 60%, #d4af37);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: count-shimmer 7s linear infinite;
+}
+
+.count-subtitle {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.count-medal {
+  width: 34px;
+  height: 38px;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 3px 8px rgba(212, 175, 55, 0.35));
+}
+
+@keyframes count-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .count-title h2 {
+    animation: none;
+  }
+}
+
 .count-panel {
   margin-top: 22px;
 }
