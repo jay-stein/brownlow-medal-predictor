@@ -1071,6 +1071,74 @@ h1 em {
   font-style: normal;
 }
 
+.prob-cell.leader {
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.6);
+}
+
+.prob-cell.leader em {
+  color: var(--gold-pale);
+  font-weight: 700;
+}
+
+.podium {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 2px;
+}
+
+.podium-hint {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.podium-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.68rem;
+  color: #c7d0e4;
+}
+
+.podium-chip b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.2);
+  color: var(--gold-pale);
+  font-size: 0.62rem;
+}
+
+.podium-chip .dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+}
+
+.podium-chip em {
+  font-style: normal;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.podium-chip > span {
+  color: var(--gold-light);
+  font-weight: 600;
+}
+
 /* Top 10 race */
 .race-panel {
   margin-top: 22px;
