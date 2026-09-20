@@ -186,7 +186,7 @@ export default function MatchesView({ matches, rounds }) {
         <b>Game</b>: d = disposals · g = goals · cv = coaches' votes. <b>3 / 2 / 1</b> are the
         model's probabilities for that vote — darker cells and longer bars mean more likely. The
         worm shows the score margin through the match (home colour above the line, away below);
-        gold dots are goals in a close final quarter.
+        hover or tap it for the scoreline at any moment, and gold dots mark clutch goals.
       </p>
       <div className="round-switcher">
         {available.map((round) => (
