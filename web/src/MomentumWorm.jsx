@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import TeamLogo from "./TeamLogo.jsx";
 import { teamColor } from "./teams.js";
 
 const PERIOD_FALLBACK = 1200;
@@ -146,6 +147,7 @@ export default function MomentumWorm({ events, home, away }) {
   }
 
   const tooltipLeft = hover ? Math.min(86, Math.max(14, (hover.x / width) * 100)) : 50;
+  const eventTeam = hover?.event ? (hover.event.side === "H" ? home : away) : null;
   let tooltip = null;
   if (hover) {
     tooltip = (
@@ -155,13 +157,18 @@ export default function MomentumWorm({ events, home, away }) {
         </b>
         <span>
           Q{hover.period} {clock(hover.seconds)}
-          {hover.event
-            ? ` · ${TYPE_LABEL[hover.event.type] ?? "Score"}${
-                hover.event.player ? ` · ${hover.event.player}` : ""
-              }`
-            : " · no score yet"}
           {hover.event && isClutch(hover.event) ? " · clutch" : ""}
         </span>
+        {hover.event ? (
+          <span className="worm-tip-event">
+            <TeamLogo team={eventTeam} size={11} />
+            {hover.event.player
+              ? `${hover.event.player} · ${TYPE_LABEL[hover.event.type] ?? "Score"}`
+              : `${eventTeam} · ${TYPE_LABEL[hover.event.type] ?? "Score"}`}
+          </span>
+        ) : (
+          <span>no score yet</span>
+        )}
       </div>
     );
   }
