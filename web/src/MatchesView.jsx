@@ -8,18 +8,53 @@ function pct(value, digits = 0) {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
-function ProbCell({ value, boost = 1 }) {
+const VOTE_COLUMNS = [
+  { key: "p3", label: "3", title: "3 votes" },
+  { key: "p2", label: "2", title: "2 votes" },
+  { key: "p1", label: "1", title: "1 vote" },
+];
+
+function ProbCell({ value, boost = 1, share = null, leader = false, label = "vote" }) {
   const probability = value ?? 0;
-  const alpha = Math.min(0.3, 0.04 + probability * 0.22 * boost);
+  const intensity = share == null ? probability * 0.22 * boost : share * 0.28;
+  const alpha = Math.min(0.36, 0.04 + intensity);
   return (
     <span
-      className="prob-cell"
+      className={leader ? "prob-cell leader" : "prob-cell"}
       style={{ background: `rgba(212, 175, 55, ${alpha.toFixed(3)})` }}
-      title={`${pct(probability, 1)} probability`}
+      title={`${pct(probability, 1)} chance of ${label}${leader ? " — most likely" : ""}`}
     >
       <i style={{ width: `${Math.min(100, probability * 100)}%` }} />
       <em>{pct(probability)}</em>
     </span>
+  );
+}
+
+function Podium({ votes }) {
+  const picks = VOTE_COLUMNS.map(({ key, label, title }) => {
+    let best = null;
+    for (const vote of votes) {
+      if (!best || (vote[key] ?? 0) > (best[key] ?? 0)) best = vote;
+    }
+    return best ? { key, label, title, vote: best, probability: best[key] ?? 0 } : null;
+  }).filter(Boolean);
+  if (!picks.length) return null;
+  return (
+    <div className="podium">
+      <span className="podium-hint">Most likely</span>
+      {picks.map(({ key, label, title, vote, probability }) => (
+        <span
+          className="podium-chip"
+          key={key}
+          title={`${vote.name}: ${pct(probability, 1)} chance of ${title}`}
+        >
+          <b>{label}</b>
+          <i className="dot" style={{ background: teamColor(vote.team) }} />
+          <em>{vote.name}</em>
+          <span>{pct(probability)}</span>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -73,6 +108,24 @@ export function MatchCard({ match, focusTeam = null }) {
   const orderedVotes = focusTeam
     ? [...votes.filter((vote) => vote.team === focusTeam), ...votes.filter((vote) => vote.team !== focusTeam)]
     : votes;
+  const maxima = {};
+  const leaders = {};
+  for (const { key } of VOTE_COLUMNS) {
+    maxima[key] = Math.max(0.0001, ...votes.map((vote) => vote[key] ?? 0));
+    let bestId = null;
+    let bestValue = -1;
+    for (const vote of votes) {
+      const value = vote[key] ?? 0;
+      if (value > bestValue) {
+        bestValue = value;
+        bestId = vote.id;
+      }
+    }
+    leaders[key] = bestId;
+  }
+  const leaderNames = Object.fromEntries(
+    VOTE_COLUMNS.map(({ key }) => [key, votes.find((vote) => vote.id === leaders[key])?.name ?? ""])
+  );
   return (
     <article className="match-card">
       <header>
@@ -96,6 +149,7 @@ export function MatchCard({ match, focusTeam = null }) {
         </span>
       </h3>
       <MomentumWorm events={match.events} home={match.home} away={match.away} />
+      <Podium votes={votes} />
       {summarise(match) ? <p className="match-summary">{summarise(match)}</p> : null}
       {match.report ? (
         <div className="match-report">
@@ -114,9 +168,18 @@ export function MatchCard({ match, focusTeam = null }) {
       <div className="vote-table">
         <div className="vote-head">
           <span>Player</span>
-          <span title="Probability of receiving 3 votes">3</span>
-          <span title="Probability of receiving 2 votes">2</span>
-          <span title="Probability of receiving 1 vote">1</span>
+          {VOTE_COLUMNS.map(({ key, label, title }) => (
+            <span
+              key={key}
+              title={
+                leaderNames[key]
+                  ? `Most likely to poll ${label}: ${leaderNames[key]} (${pct(maxima[key] ?? 0, 1)})`
+                  : title
+              }
+            >
+              {label}
+            </span>
+          ))}
           <span>Game</span>
         </div>
         {(expanded ? orderedVotes : orderedVotes.slice(0, 4)).map((vote) => (
@@ -135,9 +198,26 @@ export function MatchCard({ match, focusTeam = null }) {
                 </i>
               ))}
             </span>
-            <ProbCell value={vote.p3} boost={1.15} />
-            <ProbCell value={vote.p2} />
-            <ProbCell value={vote.p1} boost={0.85} />
+            <ProbCell
+              value={vote.p3}
+              boost={1.15}
+              share={(vote.p3 ?? 0) / maxima.p3}
+              leader={leaders.p3 === vote.id}
+              label="3 votes"
+            />
+            <ProbCell
+              value={vote.p2}
+              share={(vote.p2 ?? 0) / maxima.p2}
+              leader={leaders.p2 === vote.id}
+              label="2 votes"
+            />
+            <ProbCell
+              value={vote.p1}
+              boost={0.85}
+              share={(vote.p1 ?? 0) / maxima.p1}
+              leader={leaders.p1 === vote.id}
+              label="1 vote"
+            />
             <span className="vote-stats">
               {vote.disposals != null ? `${vote.disposals}d` : "—"}
               {vote.goals ? ` ${vote.goals}g` : ""}
