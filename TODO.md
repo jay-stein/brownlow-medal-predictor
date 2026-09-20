@@ -58,7 +58,13 @@ Kept as an experiment behind the model key; not promoted.
       winner probability, 2/5 favourites and 96% ninety-interval coverage. The production forecast
       now consumes the tagged t4 effect selection (`--tag _t4`).
 - [ ] AFL Media Brownlow predictor as an external benchmark variant
-- [ ] ESPN play-by-play scraper (scoring plays, 2017+) and Q4 / late-Q3 momentum features
+- [x] AFL CFS scoring-event scraper (2012-2026, 137,630 events from 2,960 matches) - the AFL feed
+      is richer and longer than ESPN, which was unnecessary
+- [x] Q4 / late-Q3 momentum features (`ranking_momentum`) tested on rolling 2018-2025:
+      CRPS 2.562 vs 2.493 for `ranking_season`, match NLL 5.074 vs 5.017, favourites 4/8 both,
+      winner P 0.357 vs 0.387. No predictive lift; kept as a research variant, not adopted (the
+      same verdict as Tier 1). 2020 and 2023 get notably worse, 2024/2025 slightly better - the
+      changes are within selection noise.
 
 ## Selection-leakage audit (2026-09-20)
 
