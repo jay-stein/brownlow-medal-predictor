@@ -388,7 +388,11 @@ export default function App() {
       )}
 
       {view === "teamMatches" && (
-        <TeamMatchesView matches={data.matches ?? []} teams={data.teams ?? []} />
+        <TeamMatchesView
+          matches={data.matches ?? []}
+          teams={data.teams ?? []}
+          focus={matchFocus}
+        />
       )}
 
       {view === "winners" && <PastWinners />}
@@ -399,9 +403,14 @@ export default function App() {
           rounds={data.rounds}
           matches={data.matches ?? []}
           meta={meta}
-          onOpenMatch={(match) => {
-            setMatchFocus({ matchId: match.id, round: match.round, nonce: Date.now() });
-            setView("matches");
+          onOpenMatch={(match, team) => {
+            setMatchFocus({
+              matchId: match.id,
+              round: match.round,
+              team,
+              nonce: Date.now(),
+            });
+            setView("teamMatches");
           }}
         />
       )}
