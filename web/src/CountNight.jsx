@@ -111,6 +111,27 @@ function Autocomplete({ players, excludeIds, onSelect }) {
   );
 }
 
+function MedalIcon() {
+  return (
+    <svg className="count-medal" viewBox="0 0 40 44" aria-hidden="true">
+      <defs>
+        <linearGradient id="count-medal-gold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fff3c4" />
+          <stop offset="45%" stopColor="#d4af37" />
+          <stop offset="100%" stopColor="#9a7b1c" />
+        </linearGradient>
+      </defs>
+      <polygon points="12,0 20,0 22,16 14,16" fill="#8a1f2d" />
+      <polygon points="20,0 28,0 26,16 22,16" fill="#1f3a8a" />
+      <circle cx="20" cy="28" r="13" fill="url(#count-medal-gold)" stroke="#7a611a" strokeWidth="1" />
+      <circle cx="20" cy="28" r="9" fill="none" stroke="rgba(60, 44, 0, 0.35)" />
+      <text x="20" y="32" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#3a2c00">
+        321
+      </text>
+    </svg>
+  );
+}
+
 export default function CountNight({ players, rounds, matches, meta, onOpenMatch }) {
   const calibration = meta?.countNight ?? null;
   const stored = useMemo(loadStored, []);
@@ -201,8 +222,14 @@ export default function CountNight({ players, rounds, matches, meta, onOpenMatch
 
   return (
     <section className="panel count-panel">
-      <div className="panel-head">
-        <h2>Count Night</h2>
+      <div className="panel-head count-head">
+        <div className="count-title">
+          <MedalIcon />
+          <div>
+            <h2>Count Night</h2>
+            <span className="count-subtitle">live from the count</span>
+          </div>
+        </div>
         <span className="hint">enter the votes as they are read out · live projections</span>
       </div>
       <p className="stat-legend">
@@ -294,8 +321,9 @@ export default function CountNight({ players, rounds, matches, meta, onOpenMatch
       {rows.length ? (
         <>
           <p className="count-race-caption">
-            Dots are the votes entered; dashed lines project each player to the finish, with the
-            calibrated range at the end. Faint lines are the model's original path.
+            Dots are the votes entered; dashed lines project each player forward, and the shaded
+            cone widens with every unknown round — next round's total is more certain than the
+            finish. Faint lines are the model's original path.
           </p>
           <CountRace
             rows={rows}
