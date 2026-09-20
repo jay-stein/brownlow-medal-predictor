@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import CountNight from "./CountNight.jsx";
 import MatchesView from "./MatchesView.jsx";
 import NerdyStuff from "./NerdyStuff.jsx";
 import PastWinners from "./PastWinners.jsx";
@@ -107,6 +108,13 @@ export default function App() {
           onClick={() => setView("contenders")}
         >
           Contenders
+        </button>
+        <button
+          type="button"
+          className={view === "count" ? "active" : ""}
+          onClick={() => setView("count")}
+        >
+          Count Night
         </button>
         <button
           type="button"
@@ -381,6 +389,8 @@ export default function App() {
       )}
 
       {view === "winners" && <PastWinners />}
+
+      {view === "count" && <CountNight players={players} rounds={data.rounds} meta={meta} />}
 
       {view === "nerdy" && <NerdyStuff meta={meta} />}
 

@@ -1099,6 +1099,284 @@ h1 em {
   color: #3a2107;
 }
 
+/* Count Night */
+.count-panel {
+  margin-top: 22px;
+}
+
+.count-warning {
+  color: #ffb4a2;
+  font-size: 0.72rem;
+}
+
+.count-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 14px;
+}
+
+.count-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.count-controls select {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.count-rounds-left {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.count-reset {
+  margin-left: auto;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.count-empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.count-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  background: rgba(212, 175, 55, 0.06);
+  font-size: 0.8rem;
+}
+
+.count-summary span {
+  color: var(--muted);
+}
+
+.count-summary b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+
+.count-summary em {
+  font-style: normal;
+  color: var(--gold-light);
+  font-weight: 700;
+}
+
+.count-entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+}
+
+.count-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 12px 14px;
+}
+
+.count-card header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.84rem;
+}
+
+.count-team {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.count-remove {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.count-projection {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.count-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gold-pale);
+}
+
+.count-range {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.count-odds {
+  margin-left: auto;
+  color: var(--gold-light);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.projection-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 10px 0 6px;
+}
+
+.projection-bar .bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: rgba(212, 175, 55, 0.32);
+}
+
+.projection-bar .bar-observed {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.projection-bar .bar-projected {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 14px;
+  background: var(--gold-light);
+  border-radius: 2px;
+}
+
+.count-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  flex-wrap: wrap;
+}
+
+.count-meta label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.count-meta input {
+  width: 64px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.count-rounds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.round-chip {
+  font-size: 0.6rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+}
+
+.autocomplete {
+  position: relative;
+  max-width: 420px;
+  margin-bottom: 8px;
+}
+
+.autocomplete input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font: inherit;
+}
+
+.autocomplete-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: rgba(14, 16, 24, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.autocomplete-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.autocomplete-option em {
+  margin-left: auto;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.autocomplete-option.active {
+  background: rgba(212, 175, 55, 0.14);
+}
+
 /* Top 10 race */
 .race-panel {
   margin-top: 22px;

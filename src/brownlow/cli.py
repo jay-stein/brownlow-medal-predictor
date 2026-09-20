@@ -962,6 +962,10 @@ def run_forecast(args: argparse.Namespace) -> None:
     if args.web_json is not None:
         reports_path = paths.DATA_DIR / f"match_reports_{season}.json"
         reports = json.loads(reports_path.read_text()) if reports_path.exists() else None
+        calibration_path = paths.DATA_DIR / "count_night_calibration.json"
+        count_night = (
+            json.loads(calibration_path.read_text()) if calibration_path.exists() else None
+        )
         stats_columns = [
             "DISPOSALS",
             "GOALS",
@@ -1028,6 +1032,7 @@ def run_forecast(args: argparse.Namespace) -> None:
                 "nSims": args.n_sims,
                 "generated": pd.Timestamp.now().strftime("%Y-%m-%d"),
                 "sensitivityScales": scales,
+                "countNight": count_night,
             },
         )
         web_path = Path(args.web_json)

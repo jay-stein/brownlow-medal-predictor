@@ -41,6 +41,7 @@ Notes:
 - The scoring events reconcile exactly to the official match totals: all 2,960 played 2012–2026 matches match on both home and away scores. The one fixture without events is the cancelled 2015 Round 14 Adelaide–Geelong match (Phil Walsh tragedy), which was never played.
 - The AFLCA coach votes are published per round; all 2012–2026 rows resolve to a dataset player-game by season, date and club, and every match sums to the full 30 votes.
 - Small **eligibility records are committed** under `data/eligibility/`: `ineligible_brownlow.csv` (ineligible leading vote-getters 2012–2025, sourced from the Wikipedia Brownlow articles) and `suspensions_<season>.csv` (full in-season suspension lists from the published MRO tracker; the 2026 file is a dated snapshot).
+- `count_night_calibration.json` is also committed: the validated Count Night projection widths (observed-total rule plus absolute residual quantiles by rounds remaining) fitted on 2013–2025 vote trajectories. It is embedded into the web payload by `forecast`.
 
 ## Processed outputs
 
