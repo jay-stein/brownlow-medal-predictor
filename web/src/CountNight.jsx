@@ -1,0 +1,347 @@
+import { useEffect, useMemo, useState } from "react";
+import TeamLogo from "./TeamLogo.jsx";
+import { playerProjection, remainingEstimates, sigmaFromHalfWidth, winOdds } from "./countNight.js";
+
+const STORAGE_KEY = "brownlow.count-night.v1";
+const MAX_PLAYERS = 5;
+
+function pct(value, digits = 1) {
+  if (value === null || value === undefined) return "—";
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function signed(value, digits = 1) {
+  if (value === null || value === undefined) return "—";
+  const rounded = value.toFixed(digits);
+  return value > 0 ? `+${rounded}` : rounded;
+}
+
+function loadStored() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function Autocomplete({ players, excludeIds, onSelect }) {
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+
+  const options = useMemo(() => {
+    const available = players.filter((player) => !excludeIds.has(player.id));
+    const needle = text.trim().toLowerCase();
+    if (!needle) return available.slice(0, 8);
+    return available
+      .filter((player) => {
+        const name = player.name.toLowerCase();
+        return name.includes(needle) || name.split(/\s+/).some((word) => word.startsWith(needle));
+      })
+      .slice(0, 8);
+  }, [players, excludeIds, text]);
+
+  useEffect(() => {
+    setActive(0);
+  }, [text]);
+
+  const choose = (option) => {
+    if (!option) return;
+    onSelect(option.id);
+    setText("");
+    setOpen(false);
+  };
+
+  return (
+    <div className="autocomplete">
+      <input
+        value={text}
+        placeholder="Add a player — start typing a name"
+        onChange={(event) => {
+          setText(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActive((index) => Math.min(index + 1, options.length - 1));
+            setOpen(true);
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActive((index) => Math.max(index - 1, 0));
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            choose(options[active]);
+          } else if (event.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+      />
+      {open && options.length ? (
+        <div className="autocomplete-list">
+          {options.map((option, index) => (
+            <button
+              type="button"
+              key={option.id}
+              className={index === active ? "autocomplete-option active" : "autocomplete-option"}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                choose(option);
+              }}
+              onMouseEnter={() => setActive(index)}
+            >
+              <TeamLogo team={option.team} size={16} />
+              <span>{option.name}</span>
+              <em>{option.team}</em>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default function CountNight({ players, rounds, meta }) {
+  const calibration = meta?.countNight ?? null;
+  const stored = useMemo(loadStored, []);
+  const [roundIndex, setRoundIndex] = useState(() => stored?.roundIndex ?? 0);
+  const [entries, setEntries] = useState(() =>
+    Array.isArray(stored?.entries) ? stored.entries : []
+  );
+
+  const roundList = rounds ?? [];
+  const roundCount = roundList.length;
+
+  useEffect(() => {
+    if (!players?.length) return;
+    setEntries((current) => current.filter((entry) => players.some((p) => p.id === entry.id)));
+  }, [players]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ roundIndex, entries }));
+    } catch {
+      // storage unavailable; the tab still works for the session
+    }
+  }, [roundIndex, entries]);
+
+  const rows = entries
+    .map((entry) => {
+      const player = players?.find((candidate) => candidate.id === entry.id);
+      if (!player) return null;
+      const projection = playerProjection(
+        player,
+        roundIndex,
+        entry.votes ?? 0,
+        calibration,
+        roundCount
+      );
+      if (!projection) return null;
+      return {
+        entry,
+        player,
+        projection,
+        sigma: sigmaFromHalfWidth(projection.half90),
+        remaining: remainingEstimates(player, roundIndex),
+      };
+    })
+    .filter(Boolean);
+
+  const odds = winOdds(
+    rows.map((row) => ({
+      id: row.player.id,
+      projected: row.projection.projected,
+      sigma: row.sigma,
+      eligible: !row.player.ineligible,
+    }))
+  );
+  const projectedWinner =
+    rows.length > 1
+      ? rows.reduce(
+          (best, row) => (odds[row.player.id] > (odds[best.player.id] ?? 0) ? row : best),
+          rows[0]
+        )
+      : null;
+
+  const scale = useMemo(() => {
+    if (!rows.length) return { min: 0, max: 1 };
+    const lows = rows.map((row) =>
+      Math.min(row.projection.projected - row.projection.half90, row.entry.votes ?? 0)
+    );
+    const highs = rows.map((row) =>
+      Math.max(row.projection.projected + row.projection.half90, row.entry.votes ?? 0)
+    );
+    const min = Math.min(...lows);
+    const max = Math.max(...highs, min + 1);
+    return { min, max };
+  }, [rows]);
+
+  const position = (value) => ((value - scale.min) / (scale.max - scale.min)) * 100;
+
+  const addPlayer = (id) => {
+    setEntries((current) =>
+      current.length >= MAX_PLAYERS || current.some((entry) => entry.id === id)
+        ? current
+        : [...current, { id, votes: 0 }]
+    );
+  };
+  const removePlayer = (id) => setEntries((current) => current.filter((entry) => entry.id !== id));
+  const setVotes = (id, votes) =>
+    setEntries((current) => current.map((entry) => (entry.id === id ? { ...entry, votes } : entry)));
+
+  return (
+    <section className="panel count-panel">
+      <div className="panel-head">
+        <h2>Count Night</h2>
+        <span className="hint">enter the votes as they are read out · live projections</span>
+      </div>
+      <p className="stat-legend">
+        Pick the round you are up to, add up to five players and type their votes so far. The
+        projection is their total so far plus the model's expected votes for the rounds still to
+        come; the range is calibrated on 2013–2025 count trajectories, and the win odds account for
+        suspensions (an ineligible player cannot win).
+      </p>
+      {!calibration ? (
+        <p className="count-warning">
+          Calibration table missing from the payload — regenerate the forecast to enable ranges
+          and odds.
+        </p>
+      ) : null}
+
+      <div className="count-controls">
+        <label>
+          Round
+          <select
+            value={roundIndex}
+            onChange={(event) => setRoundIndex(Number(event.target.value))}
+          >
+            {roundList.map((round, index) => (
+              <option key={round.number} value={index}>
+                {round.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="count-rounds-left">
+          {roundIndex < roundCount
+            ? `${roundList[roundIndex]?.label} · ${roundCount - 1 - roundIndex} rounds left`
+            : ""}
+        </span>
+        {entries.length ? (
+          <button
+            type="button"
+            className="count-reset"
+            onClick={() => {
+              setEntries([]);
+              setRoundIndex(0);
+            }}
+          >
+            Reset
+          </button>
+        ) : null}
+      </div>
+
+      {entries.length < MAX_PLAYERS ? (
+        <Autocomplete
+          players={players ?? []}
+          excludeIds={new Set(entries.map((entry) => entry.id))}
+          onSelect={addPlayer}
+        />
+      ) : null}
+
+      {entries.length === 0 ? (
+        <p className="count-empty">
+          Add your first player above — try typing a surname. Projections and live odds appear as
+          you go.
+        </p>
+      ) : null}
+
+      {projectedWinner ? (
+        <div className="count-summary">
+          <span>Projected winner among these</span>
+          <b>
+            <TeamLogo team={projectedWinner.player.team} size={16} /> {projectedWinner.player.name}
+          </b>
+          <em>{pct(odds[projectedWinner.player.id])}</em>
+        </div>
+      ) : null}
+
+      <div className="count-entries">
+        {rows.map(({ entry, player, projection, remaining }) => {
+          const low = projection.projected - projection.half90;
+          const high = projection.projected + projection.half90;
+          const observed = entry.votes ?? 0;
+          const pace = observed - projection.priorThrough;
+          const max = 3 * (roundIndex + 1);
+          return (
+            <article className="count-card" key={player.id}>
+              <header>
+                <TeamLogo team={player.team} size={20} />
+                <b>{player.name}</b>
+                <span className="count-team">{player.team}</span>
+                {player.ineligible ? <i className="ineligible-badge">ineligible</i> : null}
+                <button type="button" className="count-remove" onClick={() => removePlayer(player.id)}>
+                  ×
+                </button>
+              </header>
+              <div className="count-projection">
+                <span className="count-number">{projection.projected.toFixed(1)}</span>
+                <span className="count-range">
+                  {low.toFixed(1)} – {high.toFixed(1)}
+                </span>
+                {rows.length > 1 ? <span className="count-odds">{pct(odds[player.id])} to win</span> : null}
+              </div>
+              <div className="projection-bar">
+                <span
+                  className="bar-fill"
+                  style={{ left: `${position(low)}%`, width: `${Math.max(0, position(high) - position(low))}%` }}
+                />
+                <span className="bar-observed" style={{ left: `${position(observed)}%` }} />
+                <span className="bar-projected" style={{ left: `${position(projection.projected)}%` }} />
+              </div>
+              <div className="count-meta">
+                <label>
+                  Votes so far
+                  <input
+                    type="number"
+                    min={0}
+                    max={max}
+                    value={observed}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      const clamped = Number.isFinite(value)
+                        ? Math.min(Math.max(Math.trunc(value), 0), max)
+                        : 0;
+                      setVotes(player.id, clamped);
+                    }}
+                  />
+                </label>
+                <span>
+                  model said {projection.priorThrough.toFixed(1)} by now · pace {signed(pace)} · final{" "}
+                  {projection.priorFinal.toFixed(1)}
+                </span>
+              </div>
+              {remaining.some((value) => value > 0.05) ? (
+                <div className="count-rounds">
+                  {remaining.map((value, offset) =>
+                    value > 0.05 ? (
+                      <span className="round-chip" key={offset}>
+                        {roundList[roundIndex + 1 + offset]?.label ?? `+${offset + 1}`}{" "}
+                        {value.toFixed(1)}
+                      </span>
+                    ) : null
+                  )}
+                </div>
+              ) : (
+                <p className="count-meta">No rounds left to project.</p>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
