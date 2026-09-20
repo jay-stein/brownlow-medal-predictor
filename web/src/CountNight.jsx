@@ -393,7 +393,9 @@ export default function CountNight({ players, rounds, matches, meta, onOpenMatch
                       const label = roundEntry?.label ?? `+${offset + 1}`;
                       const match = findRoundMatch(matches, player.team, roundEntry?.number);
                       const title = match
-                        ? `${match.home} v ${match.away} — model expects ${value.toFixed(1)} votes`
+                        ? `${match.home} v ${match.away} — model expects ${value.toFixed(
+                            1
+                          )} votes · tap to open ${player.team}'s matches`
                         : `${label}: model expects ${value.toFixed(1)} votes`;
                       const style = {
                         background: `rgba(212, 175, 55, ${alpha.toFixed(3)})`,
@@ -412,7 +414,7 @@ export default function CountNight({ players, rounds, matches, meta, onOpenMatch
                             className={className}
                             style={style}
                             title={title}
-                            onClick={() => onOpenMatch(match)}
+                            onClick={() => onOpenMatch(match, player.team)}
                           >
                             <em>{label}</em>
                             {value.toFixed(1)}

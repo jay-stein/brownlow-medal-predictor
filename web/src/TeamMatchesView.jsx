@@ -1,13 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MatchCard } from "./MatchesView.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 
-export default function TeamMatchesView({ matches, teams }) {
+export default function TeamMatchesView({ matches, teams, focus = null }) {
   const teamNames = useMemo(
     () => (teams ?? []).map((team) => team.name).sort((a, b) => a.localeCompare(b)),
     [teams]
   );
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(focus?.team ?? null);
+
+  useEffect(() => {
+    if (focus?.team) setSelected(focus.team);
+  }, [focus?.nonce, focus?.team]);
+
   const activeTeam = selected ?? teamNames[0] ?? null;
 
   const visible = useMemo(() => {
@@ -50,7 +55,12 @@ export default function TeamMatchesView({ matches, teams }) {
       </p>
       <div className="match-grid">
         {visible.map((match) => (
-          <MatchCard key={match.id} match={match} focusTeam={activeTeam} />
+          <MatchCard
+            key={match.id}
+            match={match}
+            focusTeam={activeTeam}
+            focus={match.id === focus?.matchId}
+          />
         ))}
       </div>
     </section>
