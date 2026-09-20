@@ -6,7 +6,7 @@ Predicts AFL Brownlow Medal votes for every game of a season and simulates the c
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-d4af37.svg)](LICENSE)
 
-The mathematical treatment — Brownlow mechanics, the joint calibration protocol, the uncertainty model and known limitations — is in [`docs/methodology.md`](docs/methodology.md). The 2026 write-up is in [`docs/forecast-2026.md`](docs/forecast-2026.md).
+The mathematical treatment — Brownlow mechanics, the joint calibration protocol, the uncertainty model and known limitations — is in [`docs/methodology.md`](docs/methodology.md). A plain-English, high-school-level walkthrough is in [`docs/eli5.md`](docs/eli5.md), and the 2026 write-up is in [`docs/forecast-2026.md`](docs/forecast-2026.md).
 
 ## How it works
 
@@ -14,7 +14,7 @@ The mathematical treatment — Brownlow mechanics, the joint calibration protoco
 2. **Audited labels** — `ingest.py` builds a Champion Data ↔ AFL Tables crosswalk and attaches three-state labels: `voted`, genuine `zero`, and `unresolved` (quarantined from training, never treated as zero).
 3. **Features** — 124 per player-game: raw stats, engineered match context, within-team shares, position, and height. The production model adds the coaches' votes (`COACH_VOTES`, 0–10) and the player's share of their team's match votes, for **126 features**. Centre-bounce attendances (2021+) and a few heights are left natively missing for XGBoost.
 4. **Score generator** — a match-grouped LambdaMART ranker (`rank:ndcg`). Boosting rounds are chosen by **time-ordered season validation**; every target season's model trains only on earlier labels. The production model (`ranking_season`) adds the coaches' votes and **leave-one-game-out season form** (per-game stat means, coach-vote totals/rate/rank, team win rate); alternatives evaluated on the same rolling seasons included recent-season windows, recency weighting, a CBA ablation, a direct Plackett–Luce objective and Elo/travel context features. The season-form model won at contender CRPS 2.62 versus 3.17 for the all-history baseline.
-5. **Allocation and calibration** — `pl.py` turns utilities into the ordered 3-2-1 distribution with exact `P(0/1/2/3)` marginals, audited against enumeration and simulation. Temperature τ and persistent-effect scale σ are selected **jointly**: match NLL is integrated over the same player-season effects the simulator draws, and the predeclared criterion combines that with contender CRPS. Production: τ = 0.8, σ = 0.4.
+5. **Allocation and calibration** — `pl.py` turns utilities into the ordered 3-2-1 distribution with exact `P(0/1/2/3)` marginals, audited against enumeration and simulation. Temperature τ and persistent-effect scale σ are selected **jointly**: match NLL is integrated over the same player-season effects the simulator draws, and the predeclared criterion combines that with contender CRPS. Production: τ = 0.8, σ = 0.4, with variance-normalised **Student-t(4)** persistent effects; the heavier tails beat the Gaussian on rolling contender CRPS (2.63 vs 2.68) and 90% coverage (0.91 vs 0.85) at an unchanged favourite hit rate, and a 10%/3× Gaussian mixture is statistically equivalent.
 6. **Player effects** — each simulation holds one persistent player-season deviation across all of a player's matches, and a shrunken historical effect nudges chronically underrated players using prior-season residuals (observed minus Plackett–Luce expectation), never raw vote totals.
 7. **Award-stage eligibility** — suspended players keep their simulated votes (they affect everyone's totals) but cannot win the medal: outright and joint-first probabilities are computed over eligible players only. Sources are committed and auditable.
 8. **Interactive visualisation** — the React app in [`web/`](web) shows contender worms with 50%/90% bands, sampled simulations, a round-vote heatmap, and an "ineligible" marker for suspended players.
@@ -23,30 +23,30 @@ The mathematical treatment — Brownlow mechanics, the joint calibration protoco
 
 Data audit (2012–2025): **1,824 players crosswalked** across Champion Data and AFL Tables with zero unmatched or ambiguous, and **19,559 / 19,559 AFLCA vote rows resolved** — every match sums to the full 30 coaches' votes.
 
-Rolling out-of-sample records for the production model (each season's model, calibration and player effects use only earlier data; award probabilities respect suspensions):
+Rolling records for the frozen configuration (2021–2025; each season's model and τ/σ use only earlier data, award probabilities respect suspensions). These seasons informed several design choices, so this is a **post-selection diagnostic** rather than an unbiased estimate: automated selection across all candidate families using evidence alone scores 2.65 CRPS with 1/5 favourites on the same seasons, and **2026 is the only untouched target**.
 
 | Season | τ, σ | Contender CRPS | 90% coverage | 50% coverage | Favourite won | Winner prior P |
 |--------|------|----------------|--------------|--------------|---------------|----------------|
-| 2021 | 0.7, 0.4 | 2.78 | 0.93 | 0.53 | yes | 45.5% |
-| 2022 | 0.7, 0.4 | 1.89 | 0.93 | 0.67 | no | 17.4% |
-| 2023 | 0.7, 0.4 | 2.09 | 1.00 | 0.73 | no | 2.5% |
-| 2024 | 0.7, 0.4 | 3.58 | 0.87 | 0.27 | yes | 48.5% |
-| 2025 | 0.7, 0.4 | 2.77 | 0.87 | 0.67 | no | 2.6% |
-| **Mean** | | **2.62** | **0.92** | **0.57** | **2/5** | **23.3%** |
+| 2021 | 0.7, 0.4 | 2.78 | 0.93 | 0.47 | yes | 44.0% |
+| 2022 | 0.7, 0.5 | 1.87 | 1.00 | 0.73 | no | 17.0% |
+| 2023 | 0.8, 0.3 | 2.05 | 0.93 | 0.53 | no | 1.9% |
+| 2024 | 0.8, 0.3 | 3.79 | 0.73 | 0.13 | yes | 49.5% |
+| 2025 | 0.8, 0.4 | 2.65 | 0.93 | 0.73 | no | 3.8% |
+| **Mean** | | **2.63** | **0.91** | **0.52** | **2/5** | **23.2%** |
 
-The model is honest rather than decisive: the eventual winner averaged a 23.3% pre-count probability and the favourite won 2 of the 5 most recent counts. 2024 is the standing failure mode — record vote inflation sat outside the centre of every specification.
+With the historical player effects applied at the shape-consistent selection (shrinkage 50 games, mapping 2, no decay), the same five seasons score **CRPS 2.55** and a **25.9% average winner probability** at 96% ninety-interval coverage; the effect-adjusted record is quoted in full in [`docs/methodology.md`](docs/methodology.md). The model is honest rather than decisive: the eventual winner averaged a 23–26% pre-count probability and the favourite won 2 of the 5 most recent counts. 2024 remains the standing failure mode — record vote inflation sat outside the centre of every specification, though heavy-tailed season effects narrowed the miss.
 
-**Approach comparison** (rolling 2021–2025, suspensions applied; legacy = the original 100-model Normal-draw design, reconstructed faithfully):
+**Approach comparison** (rolling 2021–2025, post-selection diagnostic, suspensions applied; legacy = the original 100-model Normal-draw design, reconstructed faithfully):
 
 | Approach | Contender CRPS | 90% coverage | Favourite won | Winner prior P |
 |---|---|---|---|---|
 | Legacy | 4.77 | 0.20 | 0/5 | 0.000 |
-| **Current production (season form)** | **2.62** | **0.92** | **2/5** | **0.233** |
+| **Current production (season form, Student-t(4) effects)** | **2.63** | **0.91** | **2/5** | **0.232** |
 | Stacking ensemble (LambdaMART + PL + forest) | 2.65 | 0.93 | 1/5 | 0.186 |
 
-Both redesign-era approaches are in a different class from the legacy baseline. The season-form production model now edges the ensemble on CRPS as well as the top-of-count signal; the ensemble remains the better-calibrated alternative. The full write-up is in [`docs/methodology.md`](docs/methodology.md#approach-comparison-legacy-vs-current-vs-ensemble).
+Both redesign-era approaches are in a different class from the legacy baseline. The season-form production model edges the ensemble on CRPS as well as the top-of-count signal (its row reflects the adopted Student-t(4) effects); the ensemble remains the better-calibrated alternative. The full write-up is in [`docs/methodology.md`](docs/methodology.md#approach-comparison-legacy-vs-current-vs-ensemble).
 
-**2026 forecast** (post-round-24 conditional, 10,000 simulations, 32 suspended players excluded from the medal): **Nick Daicos 43.9 expected votes (90% interval 36–52), 91.6% first-or-joint**, spanning 72–96% across effect-scale specifications; Bailey Smith 32.1 (5.8%), Patrick Cripps 30.0 (3.6%) and Marcus Bontempelli 30.0 (1.4%) are the alternatives.
+**2026 forecast** (post-round-24 conditional, 10,000 simulations, 32 suspended players excluded from the medal; the production configuration is frozen until the count): **Nick Daicos 43.3 expected votes (90% interval 35–51), 90.7% first-or-joint**, spanning 70–95% across effect-scale specifications; Bailey Smith 31.9 (5.7%), Patrick Cripps 27.3 (1.8%) and Marcus Bontempelli 29.8 (1.5%) are the alternatives.
 
 ## Repository Structure
 

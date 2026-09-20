@@ -10,9 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import (
-    afl_reports as reports_mod,
-)
-from . import (
+    afl_cfs,
     aflca,
     eligibility,
     ensemble,
@@ -23,10 +21,14 @@ from . import (
     ingest,
     legacy,
     model,
+    momentum,
     paths,
     scores,
     simulate,
     validation,
+)
+from . import (
+    afl_reports as reports_mod,
 )
 
 
@@ -56,6 +58,13 @@ def run_audit() -> None:
     table = features.add_season_aggregates(table)
     crosswalk = ingest.build_crosswalk(player_stats, votes)
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
+    labelled = ingest.attach_match_context(labelled, votes)
+    labelled = features.add_quarter_context(labelled)
+    events = momentum.load_events()
+    labelled = momentum.attach_momentum(labelled, events)
+    if events is None:
+        print("play-by-play extract not found: momentum features are all missing")
+        print("run `fetch-playbyplay` to populate them\n")
 
     crosswalk.to_csv(paths.PROCESSED_DIR / "player_crosswalk.csv", index=False)
     audit["by_season"].to_csv(paths.PROCESSED_DIR / "label_audit_by_season.csv", index=False)
@@ -276,22 +285,30 @@ def run_calibrate_joint(args: argparse.Namespace) -> None:
         n_draws=args.n_draws,
         contender_count=args.contenders,
         seed=args.seed,
+        effect_distribution=args.effect_distribution,
+        effect_t_df=args.effect_t_df,
+        effect_mixture_prob=args.effect_mixture_prob,
+        effect_mixture_multiplier=args.effect_mixture_multiplier,
     )
 
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    grid_path = output_dir / f"joint_grid_{args.model}.csv"
+    grid_path = output_dir / f"joint_grid_{args.model}{args.tag}.csv"
     grid.to_csv(grid_path, index=False)
 
     tune_seasons = parse_seasons(args.tune_seasons)
     selection = validation.select_joint_params(grid, tune_seasons)
-    selection_path = output_dir / f"joint_selection_{args.model}.json"
+    selection_path = output_dir / f"joint_selection_{args.model}{args.tag}.json"
     selection_path.write_text(
         json.dumps(
             {
                 "tau": selection.tau,
                 "effect_scale": selection.effect_scale,
                 "model_key": args.model,
+                "effect_distribution": args.effect_distribution,
+                "effect_t_df": args.effect_t_df,
+                "effect_mixture_prob": args.effect_mixture_prob,
+                "effect_mixture_multiplier": args.effect_mixture_multiplier,
                 "selection_rule": (
                     "equal-weight z(effect-integrated match NLL) + "
                     "z(contender CRPS), tie-break lower NLL"
@@ -329,7 +346,9 @@ def run_calibrate_joint(args: argparse.Namespace) -> None:
 
 def run_rolling_backtest(args: argparse.Namespace) -> None:
     """Fully rolling per-season validation from a saved joint grid."""
-    grid_path = paths.PROCESSED_DIR / "evaluation" / f"joint_grid_{args.model}.csv"
+    grid_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"joint_grid_{args.model}{args.tag}.csv"
+    )
     if not grid_path.exists():
         raise SystemExit(
             f"missing {grid_path}: run `calibrate-joint --model {args.model}` first"
@@ -355,6 +374,10 @@ def run_rolling_backtest(args: argparse.Namespace) -> None:
                 n_sims=args.n_sims,
                 seed=args.seed,
                 ineligible=ineligible,
+                effect_distribution=args.effect_distribution,
+                effect_t_df=args.effect_t_df,
+                effect_mixture_prob=args.effect_mixture_prob,
+                effect_mixture_multiplier=args.effect_mixture_multiplier,
             )
             metrics = simulate.season_metrics(
                 simulation, contender_count=args.contenders, ineligible=ineligible
@@ -365,7 +388,7 @@ def run_rolling_backtest(args: argparse.Namespace) -> None:
             table.loc[index, "n_ineligible"] = len(ineligible)
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"rolling_backtest_{args.model}.csv"
+    output_path = output_dir / f"rolling_backtest_{args.model}{args.tag}.csv"
     table.to_csv(output_path, index=False)
 
     columns = [column for column in validation.ROLLING_COLUMNS if column in table.columns]
@@ -396,7 +419,9 @@ def run_player_effects(args: argparse.Namespace) -> None:
 
     tau = args.tau
     effect_scale = args.scale
-    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{args.model}.json"
+    joint_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{args.model}{args.tag}.json"
+    )
     if (tau is None or effect_scale is None) and joint_path.exists():
         joint = json.loads(joint_path.read_text())
         tau = float(joint["tau"]) if tau is None else tau
@@ -421,10 +446,14 @@ def run_player_effects(args: argparse.Namespace) -> None:
         n_draws=args.n_draws,
         contender_count=args.contenders,
         seed=args.seed,
+        effect_distribution=args.effect_distribution,
+        effect_t_df=args.effect_t_df,
+        effect_mixture_prob=args.effect_mixture_prob,
+        effect_mixture_multiplier=args.effect_mixture_multiplier,
     )
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    grid_path = output_dir / f"player_effect_grid_{args.model}.csv"
+    grid_path = output_dir / f"player_effect_grid_{args.model}{args.tag}.csv"
     grid.to_csv(grid_path, index=False)
 
     table = validation.rolling_player_effect_validation(
@@ -432,7 +461,7 @@ def run_player_effects(args: argparse.Namespace) -> None:
         report_seasons=parse_seasons(args.report_seasons),
         min_evidence=args.min_evidence,
     )
-    table_path = output_dir / f"rolling_player_effects_{args.model}.csv"
+    table_path = output_dir / f"rolling_player_effects_{args.model}{args.tag}.csv"
     table.to_csv(table_path, index=False)
 
     if not table.empty:
@@ -445,7 +474,7 @@ def run_player_effects(args: argparse.Namespace) -> None:
         print(f"mean delta contender CRPS: {table['delta_crps_contenders'].mean():.4f}")
 
     selection = validation.select_player_effects(grid, requested)
-    selection_path = output_dir / f"player_effect_selection_{args.model}.json"
+    selection_path = output_dir / f"player_effect_selection_{args.model}{args.tag}.json"
     selection_path.write_text(
         json.dumps(
             {
@@ -455,6 +484,10 @@ def run_player_effects(args: argparse.Namespace) -> None:
                 "tau": float(tau),
                 "effect_scale": float(effect_scale),
                 "model_key": args.model,
+                "effect_distribution": args.effect_distribution,
+                "effect_t_df": args.effect_t_df,
+                "effect_mixture_prob": args.effect_mixture_prob,
+                "effect_mixture_multiplier": args.effect_mixture_multiplier,
                 "selection_rule": "equal-weight z(match NLL) + z(contender CRPS)",
                 "tune_seasons": requested,
             },
@@ -467,6 +500,69 @@ def run_player_effects(args: argparse.Namespace) -> None:
         f"half_life={selection.half_life}"
     )
     print(f"\nWrote {grid_path}, {table_path} and {selection_path}")
+
+
+def run_fetch_playbyplay(args: argparse.Namespace) -> None:
+    """Scrape official AFL scoring events (CFS matchItem) for the given seasons."""
+    labelled = pd.read_parquet(paths.PROCESSED_DIR / "labelled_player_games.parquet")
+    seasons = set(parse_seasons(args.seasons))
+    fixtures = (
+        labelled[labelled["ROUND_YEAR"].isin(seasons)][["ROUND_YEAR", "PROVIDERID"]]
+        .drop_duplicates()
+        .sort_values(["ROUND_YEAR", "PROVIDERID"])
+    )
+    output = Path(args.out)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    existing = None
+    done: set[str] = set()
+    if output.exists() and not args.refresh:
+        existing = pd.read_csv(output, dtype={"PROVIDERID": str})
+        done = set(existing["PROVIDERID"].astype(str))
+    pending = fixtures[~fixtures["PROVIDERID"].astype(str).isin(done)]
+    print(
+        f"{len(fixtures)} matches requested across {len(seasons)} seasons; "
+        f"{len(pending)} to fetch ({len(done)} already cached)"
+    )
+
+    token = afl_cfs.fetch_token()
+    frames: list[pd.DataFrame] = [existing] if existing is not None else []
+    fetched = 0
+    failures = 0
+    for index, (season, provider_id) in enumerate(pending.itertuples(index=False), start=1):
+        provider_id = str(provider_id)
+        try:
+            payload = afl_cfs.fetch_match_item(provider_id, token)
+        except afl_cfs.CfsError as error:
+            if error.status in (401, 403):
+                try:
+                    token = afl_cfs.fetch_token()
+                    payload = afl_cfs.fetch_match_item(provider_id, token)
+                except afl_cfs.CfsError as retry_error:
+                    failures += 1
+                    print(f"  {provider_id}: {retry_error}")
+                    continue
+            else:
+                failures += 1
+                print(f"  {provider_id}: {error}")
+                continue
+        frames.append(afl_cfs.parse_scoring_events(payload, provider_id, int(season)))
+        fetched += 1
+        if fetched % args.flush == 0:
+            pd.concat(frames, ignore_index=True).to_csv(output, index=False)
+        if index % 100 == 0 or index == len(pending):
+            print(f"  {index}/{len(pending)} matches (latest {provider_id})")
+        time.sleep(args.pause)
+
+    combined = (
+        pd.concat(frames, ignore_index=True)
+        if frames
+        else pd.DataFrame(columns=afl_cfs.EVENT_COLUMNS)
+    )
+    combined.to_csv(output, index=False)
+    print(f"\nwrote {len(combined)} events from {combined['PROVIDERID'].nunique()} matches")
+    if failures:
+        print(f"failed matches: {failures}")
+    print(f"output: {output}")
 
 
 def run_fetch_coaches(args: argparse.Namespace) -> None:
@@ -712,14 +808,25 @@ def run_forecast(args: argparse.Namespace) -> None:
     tau, tau_matches = evaluate.fit_pooled_tau(prior_frames)
     tau_source = f"leak-free MLE on {tau_matches} earlier matches"
 
-    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{model_key}.json"
+    joint_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{model_key}{args.tag}.json"
+    )
     calibration_path = paths.PROCESSED_DIR / "evaluation" / f"calibrated_effect_scale_{model_key}.json"
+    effect_shape = {
+        "effect_distribution": args.effect_distribution,
+        "effect_t_df": args.effect_t_df,
+        "effect_mixture_prob": args.effect_mixture_prob,
+        "effect_mixture_multiplier": args.effect_mixture_multiplier,
+    }
     if args.effect_scale is not None:
         effect_scale = args.effect_scale
     elif joint_path.exists():
         joint = json.loads(joint_path.read_text())
         tau = float(joint["tau"])
         effect_scale = float(joint["effect_scale"])
+        for key in effect_shape:
+            if key in joint:
+                effect_shape[key] = joint[key]
         tau_source = (
             f"joint calibration on seasons {joint['tune_seasons'][0]}-{joint['tune_seasons'][-1]}"
         )
@@ -729,7 +836,9 @@ def run_forecast(args: argparse.Namespace) -> None:
         effect_scale = 0.0
 
     player_effect_path = (
-        paths.PROCESSED_DIR / "evaluation" / f"player_effect_selection_{model_key}.json"
+        paths.PROCESSED_DIR
+        / "evaluation"
+        / f"player_effect_selection_{model_key}{args.tag}.json"
     )
     player_effect = None
     if player_effect_path.exists():
@@ -768,6 +877,7 @@ def run_forecast(args: argparse.Namespace) -> None:
         path_count=args.web_paths,
         ineligible=ineligible,
         track_matches=args.web_json is not None,
+        **effect_shape,
     )
     players = simulation.players.sort_values("sim_mean", ascending=False).reset_index(drop=True)
 
@@ -783,6 +893,7 @@ def run_forecast(args: argparse.Namespace) -> None:
                 n_sims=args.n_sims,
                 seed=args.seed,
                 ineligible=ineligible,
+                **effect_shape,
             )
             subset = scenario.players[
                 [
@@ -851,7 +962,17 @@ def run_forecast(args: argparse.Namespace) -> None:
     if args.web_json is not None:
         reports_path = paths.DATA_DIR / f"match_reports_{season}.json"
         reports = json.loads(reports_path.read_text()) if reports_path.exists() else None
-        stats_columns = ["DISPOSALS", "GOALS", "COACH_VOTES", "RATINGPOINTS"]
+        stats_columns = [
+            "DISPOSALS",
+            "GOALS",
+            "COACH_VOTES",
+            "RATINGPOINTS",
+            "Q4_GOALS",
+            "LATE_GOALS",
+            "CLUTCH_SCORES",
+            "FIRST_GOAL",
+            "LAST_GOAL",
+        ]
         season_stats = labelled[labelled["ROUND_YEAR"] == season]
         match_stats = (
             season_stats.set_index(["PROVIDERID", "PLAYER_PLAYER_PLAYER_PLAYERID"])[
@@ -860,12 +981,37 @@ def run_forecast(args: argparse.Namespace) -> None:
             if not season_stats.empty
             else {}
         )
+        momentum_events = momentum.load_events()
+        events_by_match: dict[str, list[dict]] = {}
+        if momentum_events is not None:
+            season_events = momentum_events[momentum_events["SEASON"] == season]
+            short_type = {"GOAL": "G", "BEHIND": "B", "RUSHED_BEHIND": "R"}
+            for provider_id, group in season_events.groupby("PROVIDERID", sort=False):
+                ordered = group.sort_values(["PERIOD", "PERIOD_SECONDS"], kind="stable")
+                events_by_match[str(provider_id)] = [
+                    {
+                        "p": int(row.PERIOD),
+                        "s": int(row.PERIOD_SECONDS),
+                        "h": int(row.AGG_HOME),
+                        "a": int(row.AGG_AWAY),
+                        "v": int(row.SCORE_VALUE),
+                        "side": "H" if row.HOME_AWAY == "HOME" else "A",
+                        "type": short_type.get(str(row.SCORE_TYPE), "B"),
+                        **(
+                            {"player": str(row.PLAYER_NAME).title()}
+                            if row.SCORE_TYPE == "GOAL" and row.PLAYER_NAME
+                            else {}
+                        ),
+                    }
+                    for row in ordered.itertuples(index=False)
+                ]
         payload = simulate.forecast_export(
             simulation,
             players,
             top=args.web_players,
             reports=reports,
             match_stats=match_stats,
+            events=events_by_match,
             metadata={
                 "season": season,
                 "model": model_key,
@@ -873,6 +1019,10 @@ def run_forecast(args: argparse.Namespace) -> None:
                 "tauMatches": tau_matches,
                 "tauSource": tau_source,
                 "effectScale": effect_scale,
+                "effectDistribution": effect_shape["effect_distribution"],
+                "effectTdf": effect_shape["effect_t_df"],
+                "effectMixtureProb": effect_shape["effect_mixture_prob"],
+                "effectMixtureMultiplier": effect_shape["effect_mixture_multiplier"],
                 "playerEffect": player_effect,
                 "nIneligible": len(ineligible),
                 "nSims": args.n_sims,
@@ -884,6 +1034,19 @@ def run_forecast(args: argparse.Namespace) -> None:
         web_path.parent.mkdir(parents=True, exist_ok=True)
         web_path.write_text(json.dumps(payload, separators=(",", ":")))
         print(f"Wrote web visualisation data to {web_path}")
+
+
+def _add_effect_shape_arguments(parser: argparse.ArgumentParser) -> None:
+    """Persistent-effect distribution options plus an output-file tag."""
+    parser.add_argument(
+        "--effect-distribution", choices=simulate.EFFECT_DISTRIBUTIONS, default="normal"
+    )
+    parser.add_argument("--effect-t-df", type=float, default=4.0)
+    parser.add_argument("--effect-mixture-prob", type=float, default=simulate.MIXTURE_PROB)
+    parser.add_argument(
+        "--effect-mixture-multiplier", type=float, default=simulate.MIXTURE_MULTIPLIER
+    )
+    parser.add_argument("--tag", default="", help="suffix for evaluation output files")
 
 
 def main() -> None:
@@ -936,6 +1099,7 @@ def main() -> None:
     joint.add_argument("--contenders", type=int, default=15)
     joint.add_argument("--seed", type=int, default=42)
     joint.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+    _add_effect_shape_arguments(joint)
 
     rolling = subparsers.add_parser(
         "rolling-backtest", help="fully rolling per-season validation from a saved joint grid"
@@ -946,6 +1110,7 @@ def main() -> None:
     rolling.add_argument("--contenders", type=int, default=15)
     rolling.add_argument("--seed", type=int, default=42)
     rolling.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+    _add_effect_shape_arguments(rolling)
 
     player_effects = subparsers.add_parser(
         "player-effects", help="grid-search partially pooled historical player effects"
@@ -963,6 +1128,7 @@ def main() -> None:
     player_effects.add_argument("--contenders", type=int, default=15)
     player_effects.add_argument("--seed", type=int, default=42)
     player_effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+    _add_effect_shape_arguments(player_effects)
 
     coaches = subparsers.add_parser(
         "fetch-coaches", help="scrape AFL Coaches Association per-match votes"
@@ -970,6 +1136,15 @@ def main() -> None:
     coaches.add_argument("--seasons", default="2012-2026")
     coaches.add_argument("--out", default="data/aflca_votes.csv")
     coaches.add_argument("--pause", type=float, default=1.0, help="seconds between requests")
+
+    playbyplay = subparsers.add_parser(
+        "fetch-playbyplay", help="scrape official AFL scoring events (CFS matchItem)"
+    )
+    playbyplay.add_argument("--seasons", default="2012-2026")
+    playbyplay.add_argument("--out", default="data/playbyplay_2012_2026.csv")
+    playbyplay.add_argument("--pause", type=float, default=0.4, help="seconds between requests")
+    playbyplay.add_argument("--flush", type=int, default=25, help="checkpoint every N matches")
+    playbyplay.add_argument("--refresh", action="store_true", help="refetch cached matches")
 
     legacy_parser = subparsers.add_parser(
         "legacy-roll", help="roll the legacy Normal-draw ensemble baseline"
@@ -1025,6 +1200,7 @@ def main() -> None:
     forecast.add_argument("--max-rounds", type=int, default=3000)
     forecast.add_argument("--early-stopping", type=int, default=100)
     forecast.add_argument("--seed", type=int, default=42)
+    _add_effect_shape_arguments(forecast)
 
     args = parser.parse_args()
     if args.command == "audit":
@@ -1043,6 +1219,8 @@ def main() -> None:
         run_player_effects(args)
     elif args.command == "fetch-coaches":
         run_fetch_coaches(args)
+    elif args.command == "fetch-playbyplay":
+        run_fetch_playbyplay(args)
     elif args.command == "legacy-roll":
         run_legacy_roll(args)
     elif args.command == "ensemble-roll":

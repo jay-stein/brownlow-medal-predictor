@@ -181,6 +181,23 @@ SEASON_AGGREGATE_FEATURES = [
 
 FORM_FEATURES = CONTEXT_FEATURES + SEASON_AGGREGATE_FEATURES
 
+# Tier-1 features: time on ground, the 3-vs-4 umpire era, and how the match
+# was decided across the quarter scores (late-game context).
+TOG_FEATURES = ["TIMEONGROUNDPERCENTAGE"]
+UMPIRE_CONTEXT_FEATURES = ["UMPIRE_COUNT", "FOUR_UMPIRES"]
+QUARTER_CONTEXT_FEATURES = [
+    "Q4_MARGIN",
+    "ABS_Q4_MARGIN",
+    "Q4_CLOSE",
+    "THREEQTR_MARGIN",
+    "THREEQTR_CLOSE",
+    "COMEBACK_WIN",
+    "BLOWN_LEAD",
+]
+TIER1_FEATURES = TOG_FEATURES + UMPIRE_CONTEXT_FEATURES + QUARTER_CONTEXT_FEATURES
+
+FOUR_UMPIRE_FIRST_SEASON = 2023
+
 
 def normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Upper-case column names and replace dots (literal, not regex)."""
@@ -417,6 +434,49 @@ def add_season_aggregates(df: pd.DataFrame) -> pd.DataFrame:
         out["SEASON_TEAM_WIN_RATE"] = (win_total - win) / denominator
 
     return out.drop(columns=[column for column in ("_PLAYER_KEY", "_VOTED", "_WIN") if column in out])
+
+
+def add_quarter_context(df: pd.DataFrame) -> pd.DataFrame:
+    """Player-perspective quarter context from match-level quarter scores.
+
+    ``HOME_Q1``–``AWAY_Q4`` and ``UMPIRE_COUNT`` come from
+    :func:`brownlow.ingest.attach_match_context`. Where the AFL Tables join is
+    missing (the unlabelled forecast season) the umpire count falls back to the
+    known era rule (four field umpires since 2023); quarter features stay
+    missing for XGBoost.
+    """
+    out = df.copy()
+    home_pre3 = out["HOME_Q1"] + out["HOME_Q2"] + out["HOME_Q3"]
+    away_pre3 = out["AWAY_Q1"] + out["AWAY_Q2"] + out["AWAY_Q3"]
+    at_home = out["AT_HOME"] == 1
+    player_q4 = np.where(at_home, out["HOME_Q4"], out["AWAY_Q4"])
+    opponent_q4 = np.where(at_home, out["AWAY_Q4"], out["HOME_Q4"])
+    player_pre3 = np.where(at_home, home_pre3, away_pre3)
+    opponent_pre3 = np.where(at_home, away_pre3, home_pre3)
+
+    out["Q4_MARGIN"] = player_q4 - opponent_q4
+    out["ABS_Q4_MARGIN"] = np.abs(out["Q4_MARGIN"])
+    out["Q4_CLOSE"] = np.where(out["ABS_Q4_MARGIN"] <= 6, 1.0, 0.0)
+    out["Q4_CLOSE"] = out["Q4_CLOSE"].where(out["ABS_Q4_MARGIN"].notna())
+    out["THREEQTR_MARGIN"] = player_pre3 - opponent_pre3
+    out["THREEQTR_CLOSE"] = np.where(np.abs(out["THREEQTR_MARGIN"]) <= 12, 1.0, 0.0)
+    out["THREEQTR_CLOSE"] = out["THREEQTR_CLOSE"].where(out["THREEQTR_MARGIN"].notna())
+    out["COMEBACK_WIN"] = (
+        (out["THREEQTR_MARGIN"] <= -13) & (out["PLAYERTEAM_OUTCOME"] == "WIN")
+    ).astype(float)
+    out["COMEBACK_WIN"] = out["COMEBACK_WIN"].where(out["THREEQTR_MARGIN"].notna())
+    out["BLOWN_LEAD"] = (
+        (out["THREEQTR_MARGIN"] >= 13) & (out["PLAYERTEAM_OUTCOME"] == "LOSE")
+    ).astype(float)
+    out["BLOWN_LEAD"] = out["BLOWN_LEAD"].where(out["THREEQTR_MARGIN"].notna())
+
+    four_umpire_seasons = out["ROUND_YEAR"] >= FOUR_UMPIRE_FIRST_SEASON
+    out["UMPIRE_COUNT"] = out["UMPIRE_COUNT"].where(
+        out["UMPIRE_COUNT"].notna(), np.where(four_umpire_seasons, 4.0, np.nan)
+    )
+    out["FOUR_UMPIRES"] = np.where(out["UMPIRE_COUNT"] >= 4, 1.0, 0.0)
+    out["FOUR_UMPIRES"] = out["FOUR_UMPIRES"].where(out["UMPIRE_COUNT"].notna())
+    return out
 
 
 def build_feature_table(

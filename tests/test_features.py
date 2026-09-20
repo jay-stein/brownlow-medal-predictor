@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from brownlow import ingest
 from brownlow.features import (
     FEATURE_LIST,
     NATIVE_MISSING_FEATURES,
@@ -10,6 +11,7 @@ from brownlow.features import (
     FeaturePreprocessor,
     add_height_features,
     add_match_context,
+    add_quarter_context,
     add_season_aggregates,
     compute_team_elo,
 )
@@ -180,3 +182,99 @@ def test_add_season_aggregates_leave_one_game_out():
     p3 = out[out[PLAYER_COLUMN] == "p3"].iloc[0]
     assert np.isnan(p3["SEASON_DISPOSALS_PG"])
     assert p3["SEASON_GAMES"] == 1
+
+
+def test_attach_match_context_joins_quarters_and_umpires():
+    votes = pd.DataFrame(
+        {
+            "Season": [2024],
+            "Round": [1],
+            "Date": ["2024-03-16"],
+            "Home.team": ["Carlton"],
+            "Away.team": ["Richmond"],
+            "HQ1G": [3],
+            "HQ1B": [2],
+            "HQ2G": [2],
+            "HQ2B": [1],
+            "HQ3G": [1],
+            "HQ3B": [0],
+            "HQ4G": [4],
+            "HQ4B": [1],
+            "AQ1G": [1],
+            "AQ1B": [0],
+            "AQ2G": [2],
+            "AQ2B": [0],
+            "AQ3G": [3],
+            "AQ3B": [3],
+            "AQ4G": [2],
+            "AQ4B": [2],
+            "Umpire.1": ["U1"],
+            "Umpire.2": ["U2"],
+            "Umpire.3": ["U3"],
+            "Umpire.4": ["U4"],
+        }
+    )
+    table = pd.DataFrame(
+        {
+            "HOME_TEAM_NAME": ["Carlton"],
+            "AWAY_TEAM_NAME": ["Richmond"],
+            "GAME_DATE": ["2024-03-16"],
+            "ROUND_YEAR": [2024],
+            "AT_HOME": [1],
+            "PLAYERTEAM_OUTCOME": ["WIN"],
+        }
+    )
+    out = ingest.attach_match_context(table, votes)
+    assert out.loc[0, "HOME_Q1"] == 20  # 3 goals, 2 behinds
+    assert out.loc[0, "HOME_Q4"] == 25
+    assert out.loc[0, "AWAY_Q3"] == 21
+    assert out.loc[0, "UMPIRE_COUNT"] == 4
+    assert out.loc[0, "UMPIRE_1"] == "U1"
+
+
+def test_add_quarter_context_player_perspective():
+    frame = pd.DataFrame(
+        {
+            "HOME_Q1": [20.0],
+            "HOME_Q2": [13.0],
+            "HOME_Q3": [6.0],
+            "HOME_Q4": [25.0],
+            "AWAY_Q1": [6.0],
+            "AWAY_Q2": [12.0],
+            "AWAY_Q3": [21.0],
+            "AWAY_Q4": [14.0],
+            "AT_HOME": [1],
+            "PLAYERTEAM_OUTCOME": ["WIN"],
+            "ROUND_YEAR": [2024],
+            "UMPIRE_COUNT": [4.0],
+        }
+    )
+    out = add_quarter_context(frame)
+    assert out.loc[0, "THREEQTR_MARGIN"] == pytest.approx(0.0)
+    assert out.loc[0, "Q4_MARGIN"] == pytest.approx(11.0)
+    assert out.loc[0, "Q4_CLOSE"] == 0.0
+    assert out.loc[0, "COMEBACK_WIN"] == 0.0
+    assert out.loc[0, "FOUR_UMPIRES"] == 1.0
+
+
+def test_add_quarter_context_comeback_and_umpire_era_fallback():
+    frame = pd.DataFrame(
+        {
+            "HOME_Q1": [10.0],
+            "HOME_Q2": [10.0],
+            "HOME_Q3": [10.0],
+            "HOME_Q4": [40.0],
+            "AWAY_Q1": [20.0],
+            "AWAY_Q2": [20.0],
+            "AWAY_Q3": [20.0],
+            "AWAY_Q4": [10.0],
+            "AT_HOME": [1],
+            "PLAYERTEAM_OUTCOME": ["WIN"],
+            "ROUND_YEAR": [2026],
+            "UMPIRE_COUNT": [np.nan],
+        }
+    )
+    out = add_quarter_context(frame)
+    assert out.loc[0, "COMEBACK_WIN"] == 1.0
+    assert out.loc[0, "Q4_MARGIN"] == pytest.approx(30.0)
+    assert out.loc[0, "FOUR_UMPIRES"] == 1.0  # four-umpire era rule for 2026

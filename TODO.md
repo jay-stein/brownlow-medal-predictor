@@ -13,7 +13,111 @@ combined variant is worse than either block alone, so promote the season aggrega
 - [x] Historical player effects: `player-effects --model ranking_season --seasons 2015-2025` (100/4/0, improves 6/8 seasons)
 - [x] Regenerate the forecast and web payload with `--model ranking_season`
 - [x] Update the web model label, README, methodology and `forecast-2026.md`
-- [ ] Re-check the rolling records and the live site after deploy
+- [x] Re-check the rolling records and the live site after deploy
+
+## Heavy-tailed persistent effects (Tier 2, adopted)
+
+The Gaussian effect distribution understated extreme outcomes. Variance-normalised Student-t(4)
+and a 10%/3x mixture both beat it on rolling 2021-2025 (CRPS 2.63 vs 2.68, 90% coverage 0.91 vs
+0.85) at an unchanged favourite hit rate (2/5). Student-t(4) is adopted for parsimony.
+
+- [x] `simulate.draw_effects` with normal/student-t/mixture, all variance-normalised
+- [x] `--effect-distribution` and `--tag` on `calibrate-joint`, `rolling-backtest`, `forecast`
+- [x] Rolling comparison: normal 2.684/0.853, Student-t 2.628/0.907, mixture 2.626/0.907
+- [x] Adopt Student-t(4); regenerate the 2026 forecast and Past Winners (7/12 hits, 46.8% avg winner P)
+- [x] Update README, methodology, `forecast-2026.md` and the Nerdy Stuff page
+- [ ] Re-run the six-model comparison under Student-t(4) if the ensemble question is revisited
+
+## Tier 1 context features (tested, not adopted)
+
+Time-on-ground, umpire count/era and quarter-level team context were added to the audit and a
+`ranking_tier1` variant was trained. Rolling 2021-2025: CRPS 2.677 vs 2.684 (noise), 90% coverage
+0.880 vs 0.853 (better) but winner probability 0.200 vs 0.241 (worse) and match NLL slightly worse.
+Kept as an experiment behind the model key; not promoted.
+
+- [x] `ingest.attach_match_context`, `features.add_quarter_context`, `ranking_tier1`
+- [x] Coverage verified (TOG 100%, umpire count 100% with 2026 era fallback, quarter context 92.8%)
+- [x] Rolling comparison against `ranking_season`
+- [ ] Optional: isolate TOG / umpire-era / quarter blocks to attribute the coverage gain
+
+## Remaining Tier 1b / Tier 2 / ESPN work
+
+- [ ] Shrunken umpire-crew tendency (umpire identity is in the raw data 2012-2025, unused)
+- [ ] Coach-vote dispersion as a match-level temperature modifier
+- [x] Joint (tau, sigma, alpha-mapping) selection tested and **rejected**: the fully joint grid picks
+      mapping 2 in every target season and loses to the current protocol on the rolling targets
+      (CRPS 2.57 vs 2.50, favourite 2/5 vs 3/5, winner P 0.28 vs 0.32, match NLL tied at 5.09).
+      Superseded note: that comparison fixed mapping 4 from the Gaussian selection; under
+      Student-t(4) the evidence independently selects 50/2/0 (next item), so the fixed-m4 baseline
+      is historical rather than the current production config. The rejection of full jointness
+      stands on the NLL/CRPS/winner-P trade. Grid kept at
+      `data/processed/evaluation/joint_effect_grid_ranking_season_t4.csv`.
+- [x] Shape flags added to `player-effects` and rerun under Student-t(4). The evidence selects
+      shrinkage 50 / mapping 2 (weaker than the Gaussian's 100/4): with fat tails supplying the
+      extreme-season variance, the effect-adjusted rolling diagnostic scores CRPS 2.55, 25.9%
+      winner probability, 2/5 favourites and 96% ninety-interval coverage. The production forecast
+      now consumes the tagged t4 effect selection (`--tag _t4`).
+- [ ] AFL Media Brownlow predictor as an external benchmark variant
+- [x] AFL CFS scoring-event scraper (2012-2026, 137,630 events from 2,960 matches) - the AFL feed
+      is richer and longer than ESPN, which was unnecessary
+- [x] Q4 / late-Q3 momentum features (`ranking_momentum`) tested on rolling 2018-2025:
+      CRPS 2.562 vs 2.493 for `ranking_season`, match NLL 5.074 vs 5.017, favourites 4/8 both,
+      winner P 0.357 vs 0.387. No predictive lift; kept as a research variant, not adopted (the
+      same verdict as Tier 1). 2020 and 2023 get notably worse, 2024/2025 slightly better - the
+      changes are within selection noise.
+
+## Selection-leakage audit (2026-09-20)
+
+- [x] Pipeline audit: training filters, residual history, Elo chronology, simulated-mean
+      contenders and pre-count eligibility are clean. Residual exposures: the crosswalk is built on
+      all seasons (negligible), the unused tier-1 variant hard-codes the 2023 umpire era, and the
+      Past Winners early-season cards use later-chosen settings (wording fixed).
+- [x] Evidence-only shape selection never picks Student-t: it chooses Gaussian/mixture and scores
+      2.67 CRPS over 2021-2025 versus 2.63 fixed. The t4 adoption is a declared structural choice,
+      not an evidence-selected winner.
+- [x] Automated selection across 12 candidate families picks `ranking_tier1` for every target and
+      scores 2.65 CRPS / 1-of-5 favourites / 19.3% winner probability - the honest procedure-level
+      bound.
+- [x] README, methodology (§8.1), `forecast-2026.md`, Nerdy Stuff and the Past Winners note
+      relabelled as post-selection diagnostics.
+- [x] Production configuration frozen for 2026 (ranking_season, Student-t(4), tau 0.8 / sigma 0.4,
+      effects 50/2/0, 32 ineligible players).
+- [ ] Optional: a `meta-roll` command that reports the automated-selection record routinely.
+
+## Momentum visualisation ideas (web app)
+
+The play-by-play extract (2012-2026) supports much richer match storytelling than the current
+tiles. Prerequisite: export per-match scoring events (or a compact summary) into the web payload;
+the 2026 payload currently carries votes, triples and reports only.
+
+Per game (All Matches expandable tile):
+- [ ] **Score worm** — running margin across the match, Q4 and last 10 minutes shaded, clutch
+      goals marked, biggest goal run annotated; compact sparkline in the tile, full chart on expand.
+- [ ] **Momentum strip** — time-proportional coloured blocks per goal run (home/away), so a game's
+      shape is readable at a glance.
+- [ ] **Clutch badges on player rows** — Q4 goals, late-window scores, first/last goal of the game,
+      small enough to sit beside the vote probabilities.
+
+Round view:
+- [ ] **Round grid** — nine mini worms per round with a round selector; click one to expand into
+      the full match tile.
+- [ ] Highlight games where the biggest Q4 swing came from the team with the top-vote player.
+
+Season and analysis:
+- [ ] **Clutch vs votes scatter** (Nerdy Stuff) — player votes received vs Q4/clutch scoring,
+      to test visually whether umpires reward late-game impact.
+- [ ] Team-level — Q4 swing vs the winning team's share of votes; does the model/umpires favour
+      the comeback side?
+- [ ] Top 10 race annotations — rounds where the leader's game was clutch/Q4-driven.
+
+Interactive (optional, heavier):
+- [ ] Play-through scrubber along the match timeline (score, margin, scorer at cursor).
+- [ ] Round-by-round momentum heatmap per team, mirroring the existing team round-vote heatmap.
+
+Technical notes:
+- [ ] Add a payload flag for compact per-match events (period, seconds, side, value, player, margin).
+- [ ] Keep it small — ~10k events per season encodes to roughly 1 MB; seconds as small ints,
+      players by id, reuse the existing worm/`useNarrow` components and `TeamLogo` conventions.
 
 ## Web engagement polish
 

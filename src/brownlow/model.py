@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from . import features, pl
+from . import features, momentum, pl
 from .folds import time_ordered_cv_indices
 
 REGRESSION = "regression"
@@ -35,6 +35,8 @@ RANKING_COACHES = "ranking_coaches"
 RANKING_FORM = "ranking_form"
 RANKING_SEASON = "ranking_season"
 RANKING_CONTEXT = "ranking_context"
+RANKING_TIER1 = "ranking_tier1"
+RANKING_MOMENTUM = "ranking_momentum"
 
 REGRESSION_PARAMS: dict = {
     "objective": "reg:pseudohubererror",
@@ -80,6 +82,8 @@ MODEL_PARAMS: dict[str, dict] = {
     RANKING_FORM: RANKING_PARAMS,
     RANKING_SEASON: RANKING_PARAMS,
     RANKING_CONTEXT: RANKING_PARAMS,
+    RANKING_TIER1: RANKING_PARAMS,
+    RANKING_MOMENTUM: RANKING_PARAMS,
 }
 
 CBA_FEATURES = [
@@ -106,6 +110,22 @@ MODEL_OPTIONS: dict[str, dict] = {
     RANKING_CONTEXT: {
         "base": RANKING,
         "extra_features": COACH_FEATURES + features.CONTEXT_FEATURES,
+    },
+    RANKING_TIER1: {
+        "base": RANKING,
+        "extra_features": (
+            COACH_FEATURES
+            + features.SEASON_AGGREGATE_FEATURES
+            + features.TIER1_FEATURES
+        ),
+    },
+    RANKING_MOMENTUM: {
+        "base": RANKING,
+        "extra_features": (
+            COACH_FEATURES
+            + features.SEASON_AGGREGATE_FEATURES
+            + momentum.MOMENTUM_FEATURES
+        ),
     },
 }
 

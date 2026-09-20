@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import MomentumWorm from "./MomentumWorm.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { teamColor } from "./teams.js";
 
@@ -53,6 +54,16 @@ function mentionsTopPick(match) {
   return report.text.toLowerCase().includes(surname);
 }
 
+function clutchBadges(vote) {
+  const badges = [];
+  if (vote.q4Goals) badges.push(`Q4 ×${vote.q4Goals}`);
+  if (vote.lateGoals && vote.lateGoals !== vote.q4Goals) badges.push(`late ×${vote.lateGoals}`);
+  if (vote.clutchScores) badges.push(`clutch ${vote.clutchScores}`);
+  if (vote.firstGoal) badges.push("first goal");
+  if (vote.lastGoal) badges.push("last goal");
+  return badges;
+}
+
 export function MatchCard({ match, focusTeam = null }) {
   const [expanded, setExpanded] = useState(false);
   const homeWon = match.homeScore > match.awayScore;
@@ -84,6 +95,7 @@ export function MatchCard({ match, focusTeam = null }) {
           <TeamLogo team={match.away} size={18} />
         </span>
       </h3>
+      <MomentumWorm events={match.events} home={match.home} away={match.away} />
       {summarise(match) ? <p className="match-summary">{summarise(match)}</p> : null}
       {match.report ? (
         <div className="match-report">
@@ -116,7 +128,12 @@ export function MatchCard({ match, focusTeam = null }) {
           >
             <span className="vote-player">
               <i className="dot" style={{ background: teamColor(vote.team) }} />
-              {vote.name}
+              <span className="vote-name">{vote.name}</span>
+              {clutchBadges(vote).map((badge) => (
+                <i className="clutch-badge" key={badge}>
+                  {badge}
+                </i>
+              ))}
             </span>
             <ProbCell value={vote.p3} boost={1.15} />
             <ProbCell value={vote.p2} />
@@ -167,7 +184,9 @@ export default function MatchesView({ matches, rounds }) {
       </div>
       <p className="stat-legend">
         <b>Game</b>: d = disposals · g = goals · cv = coaches' votes. <b>3 / 2 / 1</b> are the
-        model's probabilities for that vote — darker cells and longer bars mean more likely.
+        model's probabilities for that vote — darker cells and longer bars mean more likely. The
+        worm shows the score margin through the match (home colour above the line, away below);
+        gold dots are goals in a close final quarter.
       </p>
       <div className="round-switcher">
         {available.map((round) => (

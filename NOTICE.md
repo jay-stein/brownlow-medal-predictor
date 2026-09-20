@@ -14,6 +14,8 @@ fetched at run time.
   per-match coaching panel votes.
 - [AFL.com.au](https://www.afl.com.au) match centre pages: short excerpts from official
   match reports (headline, lead paragraph) with links back to the source articles.
+- AFL CFS match-centre feed (`/cfs/afl/matchItem`): official scoring timeline per match
+  (scorer, period, clock, running score), used for late-game and momentum features.
 - [Squiggle](https://squiggle.com.au) API: club logo images used in the web visualisation.
   Club logos and names are trademarks of their respective clubs.
 - AFL.com.au Brownlow award endpoint, used for Brownlow predictor votes.
