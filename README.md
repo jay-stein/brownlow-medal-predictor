@@ -6,7 +6,7 @@ Predicts AFL Brownlow Medal votes for every game of a season and simulates the c
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-d4af37.svg)](LICENSE)
 
-The mathematical treatment — Brownlow mechanics, the joint calibration protocol, the uncertainty model and known limitations — is in [`docs/methodology.md`](docs/methodology.md). The 2026 write-up is in [`docs/forecast-2026.md`](docs/forecast-2026.md).
+The mathematical treatment — Brownlow mechanics, the joint calibration protocol, the uncertainty model and known limitations — is in [`docs/methodology.md`](docs/methodology.md). A plain-English, high-school-level walkthrough is in [`docs/eli5.md`](docs/eli5.md), and the 2026 write-up is in [`docs/forecast-2026.md`](docs/forecast-2026.md).
 
 ## How it works
 
