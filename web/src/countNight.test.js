@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   playerProjection,
+  projectedPath,
+  projectionBand,
   remainingCount,
   remainingEstimates,
   sigmaFromHalfWidth,
@@ -42,6 +44,23 @@ test("round index clamps to the season length", () => {
 test("remaining estimates slice the round increments", () => {
   assert.deepEqual(remainingEstimates(player, 1), [4, 5]);
   assert.deepEqual(remainingEstimates(player, 3), []);
+});
+
+test("projected path joins the observed total to the remaining increments", () => {
+  const path = projectedPath(player, 1, 7);
+  assert.deepEqual(path, [null, 7, 11, 16]);
+});
+
+test("projection band tapers to zero at the final round", () => {
+  const calibration = { q90: [0, 2, 3, 4] };
+  const band = projectionBand(player, 1, 7, calibration);
+  // round 1 has two rounds remaining -> q90[2] = 3
+  assert.equal(band.lower[1], 4);
+  assert.equal(band.upper[1], 10);
+  // final round: no uncertainty left
+  assert.equal(band.lower[3], 16);
+  assert.equal(band.upper[3], 16);
+  assert.equal(band.lower[0], null);
 });
 
 test("sigma conversion keeps a floor", () => {

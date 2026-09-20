@@ -34,6 +34,46 @@ export function remainingEstimates(player, roundIndex) {
   return increments.slice(roundIndex + 1);
 }
 
+/**
+ * Cumulative path after the count: the observed total at the current round,
+ * then the observed total plus the model's expected increments for the rounds
+ * still to come (the lambda = 1 rule). Entries before the current round are
+ * null; the chart draws the prior path there instead.
+ */
+export function projectedPath(player, roundIndex, observed) {
+  const cumulative = player?.rounds?.cumMean;
+  const increments = player?.rounds?.incMean;
+  if (!Array.isArray(cumulative) || !cumulative.length) return [];
+  const last = cumulative.length - 1;
+  const index = Math.min(Math.max(roundIndex, 0), last);
+  const path = cumulative.map(() => null);
+  let running = observed ?? 0;
+  path[index] = running;
+  const inc = Array.isArray(increments) ? increments : [];
+  for (let round = index + 1; round <= last; round += 1) {
+    running += inc[round] ?? 0;
+    path[round] = running;
+  }
+  return path;
+}
+
+/** Funnel band around the projected path, widening with the rounds remaining. */
+export function projectionBand(player, roundIndex, observed, calibration) {
+  const path = projectedPath(player, roundIndex, observed);
+  if (!path.length) return { lower: [], upper: [] };
+  const last = path.length - 1;
+  const index = Math.min(Math.max(roundIndex, 0), last);
+  const lower = path.map(() => null);
+  const upper = path.map(() => null);
+  for (let round = index; round <= last; round += 1) {
+    if (path[round] === null) continue;
+    const half = quantileAt(calibration?.q90, last - round);
+    lower[round] = path[round] - half;
+    upper[round] = path[round] + half;
+  }
+  return { lower, upper };
+}
+
 export function sigmaFromHalfWidth(halfWidth, z = Z90) {
   return Math.max((halfWidth ?? 0) / z, 1e-6);
 }

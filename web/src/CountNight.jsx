@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import CountRace from "./CountRace.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { playerProjection, remainingEstimates, sigmaFromHalfWidth, winOdds } from "./countNight.js";
 
@@ -212,9 +213,18 @@ export default function CountNight({ players, rounds, meta }) {
       ) : null}
 
       <div className="count-controls">
-        <label>
-          Round
+        <span className="count-control-label">Round</span>
+        <div className="round-stepper">
+          <button
+            type="button"
+            onClick={() => setRoundIndex((index) => Math.max(0, index - 1))}
+            disabled={roundIndex <= 0}
+            aria-label="Previous round"
+          >
+            −
+          </button>
           <select
+            className="round-select"
             value={roundIndex}
             onChange={(event) => setRoundIndex(Number(event.target.value))}
           >
@@ -224,11 +234,17 @@ export default function CountNight({ players, rounds, meta }) {
               </option>
             ))}
           </select>
-        </label>
+          <button
+            type="button"
+            onClick={() => setRoundIndex((index) => Math.min(roundCount - 1, index + 1))}
+            disabled={roundIndex >= roundCount - 1}
+            aria-label="Next round"
+          >
+            +
+          </button>
+        </div>
         <span className="count-rounds-left">
-          {roundIndex < roundCount
-            ? `${roundList[roundIndex]?.label} · ${roundCount - 1 - roundIndex} rounds left`
-            : ""}
+          {roundIndex < roundCount ? `${roundCount - 1 - roundIndex} rounds left` : ""}
         </span>
         {entries.length ? (
           <button
@@ -267,6 +283,21 @@ export default function CountNight({ players, rounds, meta }) {
           </b>
           <em>{pct(odds[projectedWinner.player.id])}</em>
         </div>
+      ) : null}
+
+      {rows.length ? (
+        <>
+          <p className="count-race-caption">
+            Dots are the votes entered; dashed lines project each player to the finish, with the
+            calibrated range at the end. Faint lines are the model's original path.
+          </p>
+          <CountRace
+            rows={rows}
+            roundIndex={roundIndex}
+            roundList={roundList}
+            calibration={calibration}
+          />
+        </>
       ) : null}
 
       <div className="count-entries">
