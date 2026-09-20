@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MomentumWorm from "./MomentumWorm.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { teamColor } from "./teams.js";
@@ -72,8 +72,21 @@ function clutchBadges(vote) {
   return badges;
 }
 
-export function MatchCard({ match, focusTeam = null }) {
+export function MatchCard({ match, focusTeam = null, focus = false }) {
   const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef(null);
+
+  useEffect(() => {
+    if (!focus) return undefined;
+    setExpanded(true);
+    const node = cardRef.current;
+    if (!node) return undefined;
+    const handle = window.requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(handle);
+  }, [focus]);
+
   const homeWon = match.homeScore > match.awayScore;
   const top = match.votes?.[0];
   const votes = match.votes ?? [];
@@ -83,7 +96,7 @@ export function MatchCard({ match, focusTeam = null }) {
     : votes;
   const exactOrder = triples[0]?.players ?? [];
   return (
-    <article className="match-card">
+    <article className={`match-card${focus ? " focused" : ""}`} ref={cardRef}>
       <header>
         <span className="round-tag">{match.round === 0 ? "OR" : `R${match.round}`}</span>
         <span className="match-meta">
@@ -192,12 +205,17 @@ export function MatchCard({ match, focusTeam = null }) {
   );
 }
 
-export default function MatchesView({ matches, rounds }) {
+export default function MatchesView({ matches, rounds, focus = null }) {
   const available = useMemo(
     () => (rounds ?? []).filter((round) => (matches ?? []).some((match) => match.round === round.number)),
     [matches, rounds]
   );
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(focus?.round ?? null);
+
+  useEffect(() => {
+    if (focus?.round !== undefined && focus?.round !== null) setSelected(focus.round);
+  }, [focus?.nonce, focus?.round]);
+
   const active = selected ?? available[available.length - 1]?.number ?? 0;
   const visible = (matches ?? []).filter((match) => match.round === active);
 
@@ -232,7 +250,7 @@ export default function MatchesView({ matches, rounds }) {
       </div>
       <div className="match-grid">
         {visible.map((match) => (
-          <MatchCard key={match.id} match={match} />
+          <MatchCard key={match.id} match={match} focus={match.id === focus?.matchId} />
         ))}
       </div>
     </section>

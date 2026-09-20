@@ -1334,6 +1334,24 @@ h1 em {
   font-weight: 700;
 }
 
+button.round-chip {
+  font-family: inherit;
+}
+
+.round-chip.clickable {
+  cursor: pointer;
+}
+
+.round-chip.clickable:hover {
+  border-color: rgba(212, 175, 55, 0.85);
+  color: var(--gold-pale);
+}
+
+.match-card.focused {
+  border-color: rgba(212, 175, 55, 0.55);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.35), 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
 .count-meta {
   display: flex;
   align-items: center;

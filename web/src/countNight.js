@@ -78,6 +78,16 @@ export function sigmaFromHalfWidth(halfWidth, z = Z90) {
   return Math.max((halfWidth ?? 0) / z, 1e-6);
 }
 
+/** The player's club match in a given round, or null on a bye. */
+export function findRoundMatch(matches, team, roundNumber) {
+  if (!Array.isArray(matches) || !team) return null;
+  return (
+    matches.find(
+      (match) => match.round === roundNumber && (match.home === team || match.away === team)
+    ) ?? null
+  );
+}
+
 function normalPdf(value) {
   return Math.exp(-0.5 * value * value) / Math.sqrt(2 * Math.PI);
 }

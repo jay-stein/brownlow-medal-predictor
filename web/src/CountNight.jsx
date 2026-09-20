@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import CountRace from "./CountRace.jsx";
 import TeamLogo from "./TeamLogo.jsx";
-import { playerProjection, remainingEstimates, sigmaFromHalfWidth, winOdds } from "./countNight.js";
+import {
+  findRoundMatch,
+  playerProjection,
+  remainingEstimates,
+  sigmaFromHalfWidth,
+  winOdds,
+} from "./countNight.js";
 
 const STORAGE_KEY = "brownlow.count-night.v1";
 const MAX_PLAYERS = 5;
@@ -105,7 +111,7 @@ function Autocomplete({ players, excludeIds, onSelect }) {
   );
 }
 
-export default function CountNight({ players, rounds, meta }) {
+export default function CountNight({ players, rounds, matches, meta, onOpenMatch }) {
   const calibration = meta?.countNight ?? null;
   const stored = useMemo(loadStored, []);
   const [roundIndex, setRoundIndex] = useState(() => stored?.roundIndex ?? 0);
@@ -383,19 +389,38 @@ export default function CountNight({ players, rounds, meta }) {
                       if (value <= 0.05) return null;
                       const alpha = Math.min(0.4, 0.05 + value * 0.13);
                       const hot = value >= 2.5;
-                      const label = roundList[roundIndex + 1 + offset]?.label ?? `+${offset + 1}`;
+                      const roundEntry = roundList[roundIndex + 1 + offset];
+                      const label = roundEntry?.label ?? `+${offset + 1}`;
+                      const match = findRoundMatch(matches, player.team, roundEntry?.number);
+                      const title = match
+                        ? `${match.home} v ${match.away} — model expects ${value.toFixed(1)} votes`
+                        : `${label}: model expects ${value.toFixed(1)} votes`;
+                      const style = {
+                        background: `rgba(212, 175, 55, ${alpha.toFixed(3)})`,
+                        borderColor: hot
+                          ? "rgba(212, 175, 55, 0.65)"
+                          : "rgba(255, 255, 255, 0.1)",
+                      };
+                      const className = ["round-chip", hot ? "hot" : "", match && onOpenMatch ? "clickable" : ""]
+                        .filter(Boolean)
+                        .join(" ");
+                      if (match && onOpenMatch) {
+                        return (
+                          <button
+                            type="button"
+                            key={offset}
+                            className={className}
+                            style={style}
+                            title={title}
+                            onClick={() => onOpenMatch(match)}
+                          >
+                            <em>{label}</em>
+                            {value.toFixed(1)}
+                          </button>
+                        );
+                      }
                       return (
-                        <span
-                          key={offset}
-                          className={hot ? "round-chip hot" : "round-chip"}
-                          style={{
-                            background: `rgba(212, 175, 55, ${alpha.toFixed(3)})`,
-                            borderColor: hot
-                              ? "rgba(212, 175, 55, 0.65)"
-                              : "rgba(255, 255, 255, 0.1)",
-                          }}
-                          title={`${label}: model expects ${value.toFixed(1)} votes`}
-                        >
+                        <span key={offset} className={className} style={style} title={title}>
                           <em>{label}</em>
                           {value.toFixed(1)}
                         </span>
