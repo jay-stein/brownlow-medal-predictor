@@ -25,6 +25,7 @@ export default function App() {
   const [showPaths, setShowPaths] = useState(true);
   const [query, setQuery] = useState("");
   const [view, setView] = useState("contenders");
+  const [matchFocus, setMatchFocus] = useState(null);
   const narrow = useNarrow();
 
   useEffect(() => {
@@ -382,7 +383,9 @@ export default function App() {
         <TeamsView teams={data.teams ?? []} rounds={data.rounds} matches={data.matches ?? []} />
       )}
 
-      {view === "matches" && <MatchesView matches={data.matches ?? []} rounds={data.rounds} />}
+      {view === "matches" && (
+        <MatchesView matches={data.matches ?? []} rounds={data.rounds} focus={matchFocus} />
+      )}
 
       {view === "teamMatches" && (
         <TeamMatchesView matches={data.matches ?? []} teams={data.teams ?? []} />
@@ -390,7 +393,18 @@ export default function App() {
 
       {view === "winners" && <PastWinners />}
 
-      {view === "count" && <CountNight players={players} rounds={data.rounds} meta={meta} />}
+      {view === "count" && (
+        <CountNight
+          players={players}
+          rounds={data.rounds}
+          matches={data.matches ?? []}
+          meta={meta}
+          onOpenMatch={(match) => {
+            setMatchFocus({ matchId: match.id, round: match.round, nonce: Date.now() });
+            setView("matches");
+          }}
+        />
+      )}
 
       {view === "nerdy" && <NerdyStuff meta={meta} />}
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  findRoundMatch,
   playerProjection,
   projectedPath,
   projectionBand,
@@ -61,6 +62,16 @@ test("projection band tapers to zero at the final round", () => {
   assert.equal(band.lower[3], 16);
   assert.equal(band.upper[3], 16);
   assert.equal(band.lower[0], null);
+});
+
+test("finds the club match for a round, or null on a bye", () => {
+  const matches = [
+    { id: "m1", round: 22, home: "Collingwood", away: "Carlton" },
+    { id: "m2", round: 23, home: "Brisbane Lions", away: "Hawthorn" },
+  ];
+  assert.equal(findRoundMatch(matches, "Hawthorn", 23).id, "m2");
+  assert.equal(findRoundMatch(matches, "Collingwood", 23), null);
+  assert.equal(findRoundMatch(matches, null, 23), null);
 });
 
 test("sigma conversion keeps a floor", () => {
