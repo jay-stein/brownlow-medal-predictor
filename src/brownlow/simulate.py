@@ -106,6 +106,8 @@ class SeasonSimulation:
     team_increment_quantiles: np.ndarray | None = None
     team_increment_probs: np.ndarray | None = None
     team_path_totals: np.ndarray | None = None
+    player_path_totals: np.ndarray | None = None
+    path_player_indices: np.ndarray | None = None
 
 
 @dataclass
@@ -273,6 +275,7 @@ def simulate_season(
     effect_t_df: float = 4.0,
     effect_mixture_prob: float = MIXTURE_PROB,
     effect_mixture_multiplier: float = MIXTURE_MULTIPLIER,
+    path_player_indices: np.ndarray | list[int] | None = None,
 ) -> SeasonSimulation:
     """Simulate one season's count with a persistent player-season effect.
 
@@ -314,6 +317,10 @@ def simulate_season(
     team_increment_quantiles = None
     team_increment_probs = None
     team_path_totals = None
+    selected_indices = (
+        np.asarray(path_player_indices, dtype=int) if path_player_indices is not None else None
+    )
+    player_path_totals = None
     match_groups = None
     match_slot_counts = None
     match_triple_counts = None
@@ -330,6 +337,10 @@ def simulate_season(
         rounds = sorted({match.round_number for match in matches})
         round_position = {round_number: index for index, round_number in enumerate(rounds)}
         totals = np.zeros((n_players, n_sims), dtype=np.int32)
+        if selected_indices is not None:
+            player_path_totals = np.zeros(
+                (len(selected_indices), len(rounds), n_sims), dtype=np.int16
+            )
         cumulative_mean = np.zeros((n_players, len(rounds)))
         cumulative_quantiles = np.zeros((n_players, len(rounds), len(ROUND_QUANTILES)))
         increment_mean = np.zeros((n_players, len(rounds)))
@@ -391,6 +402,8 @@ def simulate_season(
             round_p2[:, round_index] = (increment == 2).mean(axis=1)
             round_p3[:, round_index] = (increment == 3).mean(axis=1)
             previous[:] = totals
+            if player_path_totals is not None:
+                player_path_totals[:, round_index, :] = totals[selected_indices]
 
             team_totals = np.stack([totals[idx].sum(axis=0) for idx in team_player_indices])
             team_cumulative_mean[:, round_index] = team_totals.mean(axis=1)
@@ -459,6 +472,8 @@ def simulate_season(
         team_increment_quantiles=team_increment_quantiles,
         team_increment_probs=team_increment_probs,
         team_path_totals=team_path_totals,
+        player_path_totals=player_path_totals,
+        path_player_indices=selected_indices,
     )
 
 
