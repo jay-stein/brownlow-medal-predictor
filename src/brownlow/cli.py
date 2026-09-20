@@ -21,6 +21,7 @@ from . import (
     ingest,
     legacy,
     model,
+    momentum,
     paths,
     scores,
     simulate,
@@ -59,6 +60,11 @@ def run_audit() -> None:
     labelled, audit = ingest.attach_labels(table, votes, crosswalk=crosswalk)
     labelled = ingest.attach_match_context(labelled, votes)
     labelled = features.add_quarter_context(labelled)
+    events = momentum.load_events()
+    labelled = momentum.attach_momentum(labelled, events)
+    if events is None:
+        print("play-by-play extract not found: momentum features are all missing")
+        print("run `fetch-playbyplay` to populate them\n")
 
     crosswalk.to_csv(paths.PROCESSED_DIR / "player_crosswalk.csv", index=False)
     audit["by_season"].to_csv(paths.PROCESSED_DIR / "label_audit_by_season.csv", index=False)
