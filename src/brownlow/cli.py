@@ -412,7 +412,9 @@ def run_player_effects(args: argparse.Namespace) -> None:
 
     tau = args.tau
     effect_scale = args.scale
-    joint_path = paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{args.model}.json"
+    joint_path = (
+        paths.PROCESSED_DIR / "evaluation" / f"joint_selection_{args.model}{args.tag}.json"
+    )
     if (tau is None or effect_scale is None) and joint_path.exists():
         joint = json.loads(joint_path.read_text())
         tau = float(joint["tau"]) if tau is None else tau
@@ -437,10 +439,14 @@ def run_player_effects(args: argparse.Namespace) -> None:
         n_draws=args.n_draws,
         contender_count=args.contenders,
         seed=args.seed,
+        effect_distribution=args.effect_distribution,
+        effect_t_df=args.effect_t_df,
+        effect_mixture_prob=args.effect_mixture_prob,
+        effect_mixture_multiplier=args.effect_mixture_multiplier,
     )
     output_dir = paths.PROCESSED_DIR / "evaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
-    grid_path = output_dir / f"player_effect_grid_{args.model}.csv"
+    grid_path = output_dir / f"player_effect_grid_{args.model}{args.tag}.csv"
     grid.to_csv(grid_path, index=False)
 
     table = validation.rolling_player_effect_validation(
@@ -448,7 +454,7 @@ def run_player_effects(args: argparse.Namespace) -> None:
         report_seasons=parse_seasons(args.report_seasons),
         min_evidence=args.min_evidence,
     )
-    table_path = output_dir / f"rolling_player_effects_{args.model}.csv"
+    table_path = output_dir / f"rolling_player_effects_{args.model}{args.tag}.csv"
     table.to_csv(table_path, index=False)
 
     if not table.empty:
@@ -461,7 +467,7 @@ def run_player_effects(args: argparse.Namespace) -> None:
         print(f"mean delta contender CRPS: {table['delta_crps_contenders'].mean():.4f}")
 
     selection = validation.select_player_effects(grid, requested)
-    selection_path = output_dir / f"player_effect_selection_{args.model}.json"
+    selection_path = output_dir / f"player_effect_selection_{args.model}{args.tag}.json"
     selection_path.write_text(
         json.dumps(
             {
@@ -471,6 +477,10 @@ def run_player_effects(args: argparse.Namespace) -> None:
                 "tau": float(tau),
                 "effect_scale": float(effect_scale),
                 "model_key": args.model,
+                "effect_distribution": args.effect_distribution,
+                "effect_t_df": args.effect_t_df,
+                "effect_mixture_prob": args.effect_mixture_prob,
+                "effect_mixture_multiplier": args.effect_mixture_multiplier,
                 "selection_rule": "equal-weight z(match NLL) + z(contender CRPS)",
                 "tune_seasons": requested,
             },
@@ -756,7 +766,9 @@ def run_forecast(args: argparse.Namespace) -> None:
         effect_scale = 0.0
 
     player_effect_path = (
-        paths.PROCESSED_DIR / "evaluation" / f"player_effect_selection_{model_key}.json"
+        paths.PROCESSED_DIR
+        / "evaluation"
+        / f"player_effect_selection_{model_key}{args.tag}.json"
     )
     player_effect = None
     if player_effect_path.exists():
@@ -1011,6 +1023,7 @@ def main() -> None:
     player_effects.add_argument("--contenders", type=int, default=15)
     player_effects.add_argument("--seed", type=int, default=42)
     player_effects.add_argument("--model", choices=sorted(model.MODEL_PARAMS), default=model.RANKING)
+    _add_effect_shape_arguments(player_effects)
 
     coaches = subparsers.add_parser(
         "fetch-coaches", help="scrape AFL Coaches Association per-match votes"

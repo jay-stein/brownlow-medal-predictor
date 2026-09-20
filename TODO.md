@@ -24,7 +24,7 @@ and a 10%/3x mixture both beat it on rolling 2021-2025 (CRPS 2.63 vs 2.68, 90% c
 - [x] `simulate.draw_effects` with normal/student-t/mixture, all variance-normalised
 - [x] `--effect-distribution` and `--tag` on `calibrate-joint`, `rolling-backtest`, `forecast`
 - [x] Rolling comparison: normal 2.684/0.853, Student-t 2.628/0.907, mixture 2.626/0.907
-- [x] Adopt Student-t(4); regenerate the 2026 forecast and Past Winners (7/12 hits, 47.0% avg winner P)
+- [x] Adopt Student-t(4); regenerate the 2026 forecast and Past Winners (7/12 hits, 46.8% avg winner P)
 - [x] Update README, methodology, `forecast-2026.md` and the Nerdy Stuff page
 - [ ] Re-run the six-model comparison under Student-t(4) if the ensemble question is revisited
 
@@ -46,15 +46,37 @@ Kept as an experiment behind the model key; not promoted.
 - [ ] Coach-vote dispersion as a match-level temperature modifier
 - [x] Joint (tau, sigma, alpha-mapping) selection tested and **rejected**: the fully joint grid picks
       mapping 2 in every target season and loses to the current protocol on the rolling targets
-      (CRPS 2.57 vs 2.50, favourite 2/5 vs 3/5, winner P 0.28 vs 0.32, match NLL tied at 5.09). The
-      clean rolling effect selection independently picks mapping 4 in 7 of 8 seasons, so the fixed-m4
-      production choice is the one sustained by evidence. Grid kept at
+      (CRPS 2.57 vs 2.50, favourite 2/5 vs 3/5, winner P 0.28 vs 0.32, match NLL tied at 5.09).
+      Superseded note: that comparison fixed mapping 4 from the Gaussian selection; under
+      Student-t(4) the evidence independently selects 50/2/0 (next item), so the fixed-m4 baseline
+      is historical rather than the current production config. The rejection of full jointness
+      stands on the NLL/CRPS/winner-P trade. Grid kept at
       `data/processed/evaluation/joint_effect_grid_ranking_season_t4.csv`.
-- [ ] Add shape flags to `player-effects` and rerun under Student-t(4) so the published rolling
-      record includes the effect adjustment (the joint grid suggests CRPS ~2.50 and 3/5 favourite
-      hits with mapping 4 applied, versus 2.63 / 2/5 in the effects-free table)
+- [x] Shape flags added to `player-effects` and rerun under Student-t(4). The evidence selects
+      shrinkage 50 / mapping 2 (weaker than the Gaussian's 100/4): with fat tails supplying the
+      extreme-season variance, the effect-adjusted rolling diagnostic scores CRPS 2.55, 25.9%
+      winner probability, 2/5 favourites and 96% ninety-interval coverage. The production forecast
+      now consumes the tagged t4 effect selection (`--tag _t4`).
 - [ ] AFL Media Brownlow predictor as an external benchmark variant
 - [ ] ESPN play-by-play scraper (scoring plays, 2017+) and Q4 / late-Q3 momentum features
+
+## Selection-leakage audit (2026-09-20)
+
+- [x] Pipeline audit: training filters, residual history, Elo chronology, simulated-mean
+      contenders and pre-count eligibility are clean. Residual exposures: the crosswalk is built on
+      all seasons (negligible), the unused tier-1 variant hard-codes the 2023 umpire era, and the
+      Past Winners early-season cards use later-chosen settings (wording fixed).
+- [x] Evidence-only shape selection never picks Student-t: it chooses Gaussian/mixture and scores
+      2.67 CRPS over 2021-2025 versus 2.63 fixed. The t4 adoption is a declared structural choice,
+      not an evidence-selected winner.
+- [x] Automated selection across 12 candidate families picks `ranking_tier1` for every target and
+      scores 2.65 CRPS / 1-of-5 favourites / 19.3% winner probability - the honest procedure-level
+      bound.
+- [x] README, methodology (§8.1), `forecast-2026.md`, Nerdy Stuff and the Past Winners note
+      relabelled as post-selection diagnostics.
+- [x] Production configuration frozen for 2026 (ranking_season, Student-t(4), tau 0.8 / sigma 0.4,
+      effects 50/2/0, 32 ineligible players).
+- [ ] Optional: a `meta-roll` command that reports the automated-selection record routinely.
 
 ## Web engagement polish
 

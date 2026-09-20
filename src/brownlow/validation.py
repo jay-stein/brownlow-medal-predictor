@@ -264,12 +264,17 @@ def player_effect_grid(
     n_draws: int = 256,
     contender_count: int = simulate.DEFAULT_CONTENDERS,
     seed: int = 42,
+    effect_distribution: str = "normal",
+    effect_t_df: float = 4.0,
+    effect_mixture_prob: float = simulate.MIXTURE_PROB,
+    effect_mixture_multiplier: float = simulate.MIXTURE_MULTIPLIER,
 ) -> pd.DataFrame:
     """Score historical-effect candidates on the requested seasons.
 
     ``candidates`` are ``(shrinkage, mapping, half_life)`` triples; mapping
     zero is the unadjusted baseline. Each candidate's adjustment for a season
-    is built only from seasons before it.
+    is built only from seasons before it. The persistent-effect shape is held
+    fixed and recorded on every row.
     """
     rows: list[dict] = []
     for shrinkage, mapping, half_life in candidates:
@@ -285,10 +290,26 @@ def player_effect_grid(
                 half_life=half_life,
             )
             match_nll = simulate.integrated_match_log_loss(
-                adjusted, tau, effect_scale, n_draws=n_draws, seed=seed
+                adjusted,
+                tau,
+                effect_scale,
+                n_draws=n_draws,
+                seed=seed,
+                effect_distribution=effect_distribution,
+                effect_t_df=effect_t_df,
+                effect_mixture_prob=effect_mixture_prob,
+                effect_mixture_multiplier=effect_mixture_multiplier,
             )
             simulation = simulate.simulate_season(
-                adjusted, tau, effect_scale=effect_scale, n_sims=n_sims, seed=seed
+                adjusted,
+                tau,
+                effect_scale=effect_scale,
+                n_sims=n_sims,
+                seed=seed,
+                effect_distribution=effect_distribution,
+                effect_t_df=effect_t_df,
+                effect_mixture_prob=effect_mixture_prob,
+                effect_mixture_multiplier=effect_mixture_multiplier,
             )
             metrics = simulate.season_metrics(simulation, contender_count=contender_count)
             rows.append(
@@ -297,6 +318,8 @@ def player_effect_grid(
                     "mapping": float(mapping),
                     "half_life": float(half_life),
                     "season": int(season),
+                    "effect_distribution": effect_distribution,
+                    "effect_t_df": float(effect_t_df),
                     "match_nll": match_nll,
                     **metrics,
                 }

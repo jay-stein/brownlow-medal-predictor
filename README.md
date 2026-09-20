@@ -23,7 +23,7 @@ The mathematical treatment — Brownlow mechanics, the joint calibration protoco
 
 Data audit (2012–2025): **1,824 players crosswalked** across Champion Data and AFL Tables with zero unmatched or ambiguous, and **19,559 / 19,559 AFLCA vote rows resolved** — every match sums to the full 30 coaches' votes.
 
-Rolling out-of-sample records for the production model (each season's model, calibration and player effects use only earlier data; award probabilities respect suspensions):
+Rolling records for the frozen configuration (2021–2025; each season's model and τ/σ use only earlier data, award probabilities respect suspensions). These seasons informed several design choices, so this is a **post-selection diagnostic** rather than an unbiased estimate: automated selection across all candidate families using evidence alone scores 2.65 CRPS with 1/5 favourites on the same seasons, and **2026 is the only untouched target**.
 
 | Season | τ, σ | Contender CRPS | 90% coverage | 50% coverage | Favourite won | Winner prior P |
 |--------|------|----------------|--------------|--------------|---------------|----------------|
@@ -34,9 +34,9 @@ Rolling out-of-sample records for the production model (each season's model, cal
 | 2025 | 0.8, 0.4 | 2.65 | 0.93 | 0.73 | no | 3.8% |
 | **Mean** | | **2.63** | **0.91** | **0.52** | **2/5** | **23.2%** |
 
-The model is honest rather than decisive: the eventual winner averaged a 23.2% pre-count probability and the favourite won 2 of the 5 most recent counts. 2024 remains the standing failure mode — record vote inflation sat outside the centre of every specification, though heavy-tailed season effects narrowed the miss.
+With the historical player effects applied at the shape-consistent selection (shrinkage 50 games, mapping 2, no decay), the same five seasons score **CRPS 2.55** and a **25.9% average winner probability** at 96% ninety-interval coverage; the effect-adjusted record is quoted in full in [`docs/methodology.md`](docs/methodology.md). The model is honest rather than decisive: the eventual winner averaged a 23–26% pre-count probability and the favourite won 2 of the 5 most recent counts. 2024 remains the standing failure mode — record vote inflation sat outside the centre of every specification, though heavy-tailed season effects narrowed the miss.
 
-**Approach comparison** (rolling 2021–2025, suspensions applied; legacy = the original 100-model Normal-draw design, reconstructed faithfully):
+**Approach comparison** (rolling 2021–2025, post-selection diagnostic, suspensions applied; legacy = the original 100-model Normal-draw design, reconstructed faithfully):
 
 | Approach | Contender CRPS | 90% coverage | Favourite won | Winner prior P |
 |---|---|---|---|---|
@@ -46,7 +46,7 @@ The model is honest rather than decisive: the eventual winner averaged a 23.2% p
 
 Both redesign-era approaches are in a different class from the legacy baseline. The season-form production model edges the ensemble on CRPS as well as the top-of-count signal (its row reflects the adopted Student-t(4) effects); the ensemble remains the better-calibrated alternative. The full write-up is in [`docs/methodology.md`](docs/methodology.md#approach-comparison-legacy-vs-current-vs-ensemble).
 
-**2026 forecast** (post-round-24 conditional, 10,000 simulations, 32 suspended players excluded from the medal): **Nick Daicos 43.7 expected votes (90% interval 36–51), 90.3% first-or-joint**, spanning 70–95% across effect-scale specifications; Bailey Smith 31.9 (4.9%), Patrick Cripps 30.1 (3.2%) and Marcus Bontempelli 30.2 (1.2%) are the alternatives.
+**2026 forecast** (post-round-24 conditional, 10,000 simulations, 32 suspended players excluded from the medal; the production configuration is frozen until the count): **Nick Daicos 43.3 expected votes (90% interval 35–51), 90.7% first-or-joint**, spanning 70–95% across effect-scale specifications; Bailey Smith 31.9 (5.7%), Patrick Cripps 27.3 (1.8%) and Marcus Bontempelli 29.8 (1.5%) are the alternatives.
 
 ## Repository Structure
 

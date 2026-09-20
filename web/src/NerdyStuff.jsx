@@ -111,7 +111,12 @@ export default function NerdyStuff({ meta }) {
           <p className="nerdy-note">
             Every season is reproduced with only earlier information: the score model trains on
             earlier labels, calibration and effects are selected on earlier out-of-sample seasons,
-            then the season is forecast once. Award probabilities respect suspensions.
+            then the season is forecast once. Award probabilities respect suspensions. These seasons
+            informed several design choices, so treat the table as a <b>post-selection diagnostic</b>:
+            automated selection across all candidate families on evidence alone scores 2.65 CRPS with
+            1/5 favourites on the same seasons, and <b>2026 is the only untouched target</b>. With the
+            historical effects applied at the shape-consistent selection (50/2/0), the same five
+            seasons score 2.55 CRPS at a 25.9% average winner probability.
           </p>
           <div className="table-scroll">
             <table className="nerdy-table">
@@ -208,6 +213,11 @@ export default function NerdyStuff({ meta }) {
               <b>Small evaluation sample.</b> Five rolling seasons and five medal outcomes cannot
               prove winner-probability calibration; the model is honest rather than decisive.
             </li>
+            <li>
+              <b>Selection optimism.</b> Model family, effect shape and calibration were chosen after
+              seeing 2021-2025, so those records flatter the procedure. Automated selection on
+              evidence alone scores 2.65 CRPS and 1/5 favourites; 2026 is the clean test.
+            </li>
           </ul>
         </article>
 
@@ -236,7 +246,15 @@ export default function NerdyStuff({ meta }) {
             </li>
             <li>
               <span>Historical player effects</span>
-              <b>shrinkage 100 games, mapping 4, no decay</b>
+              <b>
+                {meta.playerEffect
+                  ? `shrinkage ${meta.playerEffect.shrinkage} games, mapping ${meta.playerEffect.mapping}, ${
+                      Number(meta.playerEffect.half_life) > 0
+                        ? `half-life ${meta.playerEffect.half_life}`
+                        : "no decay"
+                    }`
+                  : "shrinkage 50 games, mapping 2, no decay"}
+              </b>
             </li>
             <li>
               <span>Simulations</span>
