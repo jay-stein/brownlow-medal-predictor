@@ -272,6 +272,27 @@ def test_forecast_export_includes_matches_and_reports():
     assert len(team["players"]) == 4
 
 
+def test_simulate_season_tracks_selected_player_paths():
+    simulation = simulate.simulate_season(
+        _multi_round_frame(),
+        tau=1.0,
+        n_sims=20,
+        seed=5,
+        track_rounds=True,
+        path_player_indices=[0, 2],
+    )
+    paths = simulation.player_path_totals
+    assert paths.shape == (2, 2, 20)
+    assert (np.diff(paths, axis=1) >= 0).all()
+    np.testing.assert_array_equal(paths[:, -1, :], simulation.totals[[0, 2]])
+    assert list(simulation.path_player_indices) == [0, 2]
+
+    untracked = simulate.simulate_season(
+        _multi_round_frame(), tau=1.0, n_sims=10, seed=5, track_rounds=True
+    )
+    assert untracked.player_path_totals is None
+
+
 def test_draw_effects_shapes_share_variance_but_differ_in_tails():
     rng = np.random.default_rng(0)
     normal = simulate.draw_effects(rng, 5000, 4, 0.5, "normal")
