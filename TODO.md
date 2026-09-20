@@ -78,6 +78,41 @@ Kept as an experiment behind the model key; not promoted.
       effects 50/2/0, 32 ineligible players).
 - [ ] Optional: a `meta-roll` command that reports the automated-selection record routinely.
 
+## Momentum visualisation ideas (web app)
+
+The play-by-play extract (2012-2026) supports much richer match storytelling than the current
+tiles. Prerequisite: export per-match scoring events (or a compact summary) into the web payload;
+the 2026 payload currently carries votes, triples and reports only.
+
+Per game (All Matches expandable tile):
+- [ ] **Score worm** — running margin across the match, Q4 and last 10 minutes shaded, clutch
+      goals marked, biggest goal run annotated; compact sparkline in the tile, full chart on expand.
+- [ ] **Momentum strip** — time-proportional coloured blocks per goal run (home/away), so a game's
+      shape is readable at a glance.
+- [ ] **Clutch badges on player rows** — Q4 goals, late-window scores, first/last goal of the game,
+      small enough to sit beside the vote probabilities.
+
+Round view:
+- [ ] **Round grid** — nine mini worms per round with a round selector; click one to expand into
+      the full match tile.
+- [ ] Highlight games where the biggest Q4 swing came from the team with the top-vote player.
+
+Season and analysis:
+- [ ] **Clutch vs votes scatter** (Nerdy Stuff) — player votes received vs Q4/clutch scoring,
+      to test visually whether umpires reward late-game impact.
+- [ ] Team-level — Q4 swing vs the winning team's share of votes; does the model/umpires favour
+      the comeback side?
+- [ ] Top 10 race annotations — rounds where the leader's game was clutch/Q4-driven.
+
+Interactive (optional, heavier):
+- [ ] Play-through scrubber along the match timeline (score, margin, scorer at cursor).
+- [ ] Round-by-round momentum heatmap per team, mirroring the existing team round-vote heatmap.
+
+Technical notes:
+- [ ] Add a payload flag for compact per-match events (period, seconds, side, value, player, margin).
+- [ ] Keep it small — ~10k events per season encodes to roughly 1 MB; seconds as small ints,
+      players by id, reuse the existing worm/`useNarrow` components and `TeamLogo` conventions.
+
 ## Web engagement polish
 
 - [x] **Team logos** in the leaderboard, race legend, teams view and match cards (Squiggle CDN, with a colour-monogram fallback on a light disc so dark logos stay visible).
