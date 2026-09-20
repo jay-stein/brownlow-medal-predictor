@@ -24,7 +24,7 @@ function isClutch(event) {
 
 export default function MomentumWorm({ events, home, away }) {
   const [hoverFraction, setHoverFraction] = useState(null);
-  const wrapper = useRef(null);
+  const svgRef = useRef(null);
 
   const geometry = useMemo(() => {
     if (!events?.length) return null;
@@ -101,12 +101,21 @@ export default function MomentumWorm({ events, home, away }) {
     geometry;
 
   const handlePointer = (clientX) => {
-    const rect = wrapper.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return;
-    const x = ((clientX - rect.left) / rect.width) * width;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    // The SVG scales uniformly (xMidYMid meet), so when the element is wider
+    // than the viewBox ratio the chart is letterboxed. Map through the
+    // rendered content box, not the element box, or the cursor offsets.
+    const viewAspect = width / height;
+    const renderedAspect = rect.width / rect.height;
+    const contentWidth = renderedAspect > viewAspect ? rect.height * viewAspect : rect.width;
+    const offsetX = (rect.width - contentWidth) / 2;
+    const viewX = ((clientX - rect.left - offsetX) / contentWidth) * width;
     const fraction = Math.min(
       lastPeriod,
-      Math.max(0, ((x - padX) / (width - 2 * padX)) * lastPeriod)
+      Math.max(0, ((viewX - padX) / (width - 2 * padX)) * lastPeriod)
     );
     setHoverFraction((current) => (current === fraction ? current : fraction));
   };
@@ -158,9 +167,10 @@ export default function MomentumWorm({ events, home, away }) {
   }
 
   return (
-    <div className="momentum-worm-wrap" ref={wrapper}>
+    <div className="momentum-worm-wrap">
       {tooltip}
       <svg
+        ref={svgRef}
         className="momentum-worm"
         viewBox={`0 0 ${width} ${height}`}
         role="img"
